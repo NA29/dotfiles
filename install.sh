@@ -47,9 +47,9 @@ echo "Linked: ${PACKAGES[*]}"
 cat <<'EOF'
 
 Manual steps:
-  - iTerm: Settings > Profiles > Colors > Color Presets > Import
-    iterm/themes/Rose Pine.itermcolors, then select it.
-    Set the font to FiraCode Nerd Font, and Left Option key to Esc+.
+  - iTerm: Settings > Profiles > Other Actions > Import JSON Profiles,
+    pick iterm/Default.json and set it as default (Rose Pine colors,
+    JetBrains Mono Nerd Font, Left Option = Esc+).
   - Herdr: run `herdr` once; Claude integration hooks are already linked.
   - Open a new terminal to load the shell config.
 EOF

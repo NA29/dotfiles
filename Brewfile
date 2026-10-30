@@ -13,7 +13,7 @@ brew "pipx"
 
 # Terminal workflow
 cask "iterm2"
-cask "font-fira-code-nerd-font"
+cask "font-jetbrains-mono-nerd-font"
 brew "herdr"
 brew "tmux"
 
