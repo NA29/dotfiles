@@ -1,0 +1,28 @@
+# Optional apps from the personal Mac. Not needed by any config here.
+# Install with: ./install.sh --extras   (or: brew bundle --file=Brewfile.extras)
+
+# CLI utilities
+brew "bat"
+brew "btop"
+brew "htop"
+brew "tree"
+brew "wget"
+brew "cloc"
+brew "ffmpeg"
+brew "poppler"
+brew "fastfetch"
+brew "thefuck"
+brew "tectonic"
+
+# Dev toolchains
+brew "cmake"
+brew "maven"
+brew "pnpm"
+brew "pyenv"
+brew "cocoapods"
+
+# Apps
+cask "visual-studio-code"
+cask "obsidian"
+cask "maccy"
+cask "bitwarden"

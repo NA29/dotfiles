@@ -1,0 +1,20 @@
+.DS_Store
+*.bak
+*.bak-*
+*.orig
+
+# Herdr runtime state (written next to config.toml)
+herdr/.config/herdr/session.json
+herdr/.config/herdr/session-snapshots/
+herdr/.config/herdr/*.log
+herdr/.config/herdr/*.sock
+herdr/.config/herdr/*.sock.*
+
+# Claude Code runtime state (only config files are tracked)
+claude/.claude/*
+!claude/.claude/CLAUDE.md
+!claude/.claude/settings.json
+!claude/.claude/statusline.sh
+!claude/.claude/hooks/
+!claude/.claude/skills/
+claude/.claude/settings.local.json
