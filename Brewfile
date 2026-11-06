@@ -15,6 +15,7 @@ brew "pipx"
 cask "iterm2"
 cask "font-jetbrains-mono-nerd-font"
 brew "herdr"
+cask "herdr-app"   # Herdr desktop app (herdr-app/.config/herdr-app)
 brew "tmux"
 
 # Neovim (nvim/.config/nvim)

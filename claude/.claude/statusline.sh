@@ -99,6 +99,12 @@ command -v jq &>/dev/null || fallback_prompt "─ │ jq not found"
 
 input=$(cat)
 
+# Personal: keep the latest rate limits for the Herdr usage panel (never breaks the line).
+{ rl=$(printf '%s' "$input" | jq -c '.rate_limits // empty' 2>/dev/null) && [[ -n "$rl" ]] \
+    && mkdir -p "$HOME/.cache/agent-usage" \
+    && printf '{"at":%s,"rate_limits":%s}\n' "$(date +%s)" "$rl" > "$HOME/.cache/agent-usage/claude.json.tmp" \
+    && mv -f "$HOME/.cache/agent-usage/claude.json.tmp" "$HOME/.cache/agent-usage/claude.json"; } 2>/dev/null || true
+
 parsed=$(echo "$input" | jq -r '
   (.model.display_name // ""),
   (.context_window.used_percentage // 0 | tostring),

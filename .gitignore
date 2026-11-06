@@ -10,6 +10,12 @@ herdr/.config/herdr/*.log
 herdr/.config/herdr/*.sock
 herdr/.config/herdr/*.sock.*
 
+# Herdr desktop app: only config is tracked; the app writes these itself
+herdr-app/.config/herdr-app/**/gpui-kit.d.ts
+herdr-app/.config/herdr-app/**/jsconfig.json
+herdr-app/.config/herdr-app/**/.*
+herdr-app/.config/herdr-app/*.error
+
 # Claude Code runtime state (only config files are tracked)
 claude/.claude/*
 !claude/.claude/CLAUDE.md

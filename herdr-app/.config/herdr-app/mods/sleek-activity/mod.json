@@ -1,0 +1,13 @@
+{
+  "place": "none",
+  "title": "Activity",
+  "overlay": {
+    "kind": "dialog",
+    "width": 680,
+    "height": 0.72
+  },
+  "cloned_from": {
+    "name": "my-activity",
+    "version": "0.1.13"
+  }
+}
