@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "Activity",
+  "overlay": {
+    "kind": "dialog",
+    "width": 680,
+    "height": 0.72
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "zoom": 1.1,
+  "sounds": {
+    "enabled": true,
+    "done": "sounds/lol_generic_ping.mp3",
+    "blocked": "sounds/lol_assist_me_ping.mp3"
+  },
+  "font_ligatures": false,
+  "telemetry": false,
+  "minimum_contrast": 1.0,
+  "appearance": "dark"
+}
