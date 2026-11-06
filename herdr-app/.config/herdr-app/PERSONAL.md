@@ -15,7 +15,8 @@ then commit.
 - Mods used by na29-islands: `sleek-workspaces` (spaces + their agents), `sleek-activity` (activity
   card; also the Activity log dialog), `sleek-usage` (5h/7d limits), `sleek-tabs`, `sleek-status`
   (bottom bar: CPU/memory/battery, now playing, Wispr Flow, clock), `sleek-pane` (pane header),
-  `sleek-chrome` (brand row + footer buttons), `my-keys` (key actions + settings writer).
+  `sleek-chrome` (brand row + footer buttons), `sleek-files` / `sleek-changes` (the Files and
+  Changes panel island, cloned from Herdr's `files`/`changes`), `my-keys` (key actions + settings writer).
 - Overlays: `my-goto` (Go to, Cmd+P), `tmux-prefix` (Ctrl+A menu), `my-settings` (Settings,
   Cmd+, / Ctrl+A s), the Activity log (Ctrl+A a), `my-prompt` (name a new space).
 - Never edit Herdr's shipped mods/layouts; clone them (`mod.clone`, `layout.clone`).

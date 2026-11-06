@@ -157,14 +157,14 @@
                           "id": "files",
                           "type": "block",
                           "content": {
-                            "mod": "files"
+                            "mod": "sleek-files"
                           }
                         },
                         {
                           "id": "changes",
                           "type": "block",
                           "content": {
-                            "mod": "changes"
+                            "mod": "sleek-changes"
                           }
                         }
                       ],
@@ -176,7 +176,13 @@
                   },
                   "min": 280,
                   "max": 900,
-                  "hidden": true
+                  "hidden": true,
+                  "background": "#16141fb8",
+                  "radius": 10,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  }
                 }
               ],
               "padding": [
@@ -216,7 +222,7 @@
           "gap": 0
         }
       ],
-      "background": "#0000004d"
+      "background": "#00000066"
     }
   ],
   "background": {

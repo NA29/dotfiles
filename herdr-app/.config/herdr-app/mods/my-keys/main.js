@@ -111,7 +111,7 @@ function applyLook(root, r) {
   if (r["terminal.font"]) root.font = r["terminal.font"]; else delete root.font;
   if (r["terminal.fontSize"]) root.font_size = r["terminal.fontSize"]; else delete root.font_size;
 
-  for (const id of ["sidebar", "tabs", "status"]) {
+  for (const id of ["sidebar", "tabs", "status", "panel"]) {
     const n = find(root, id);
     if (!n) continue;
     n.background = chromePct >= 100 ? "chrome" : CHROME + alpha(chromePct);

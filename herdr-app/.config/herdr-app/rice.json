@@ -7,7 +7,7 @@
     "needs you"
   ],
   "activity.rows": 6,
-  "background.dim": 30,
+  "background.dim": 40,
   "background.fit": "cover",
   "background.gradient": [
     "#342d40",
