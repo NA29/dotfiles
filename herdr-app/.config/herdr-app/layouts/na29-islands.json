@@ -128,7 +128,7 @@
                         "color": "border"
                       },
                       "radius": 10,
-                      "gap": 8,
+                      "gap": 5,
                       "lone": true,
                       "border": {
                         "width": 1,

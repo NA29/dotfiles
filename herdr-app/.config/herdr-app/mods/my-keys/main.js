@@ -124,6 +124,7 @@ function applyLook(root, r) {
   const pane = find(root, "main")?.content?.pane;
   if (pane) {
     pane.radius = radius;
+    pane.gap = gap;              // between split panes: same as between the islands
     if (borders) pane.border = border; else delete pane.border;
     if (r["look.focusRing"] !== false) pane.focus = { width: 1, color: "accent" };
     else if (borders) pane.focus = border; else delete pane.focus;
