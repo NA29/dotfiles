@@ -54,7 +54,6 @@ export default class Pane extends View {
       .px(10)
       .gap(8)
       .items_center()
-      .bg(t.background)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
       .on_click(() => run("pane.focus", { pane }))

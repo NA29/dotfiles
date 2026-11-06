@@ -37,6 +37,17 @@ the personal layout with Cmd-Shift-L (or `herdr-app do layout.switch --name my-s
 bottom bar asks macOS for permission to control Spotify the first time music plays; Wispr Flow
 stats and battery only show when those exist on the machine.
 
+- **Settings:** Cmd+, (or Ctrl+A s) opens the personal Settings panel; everything it changes is
+  saved in `herdr-app/.config/herdr-app/rice.json` (look, wallpaper, bars, sounds, keys).
+- **Activity log** (Ctrl+A a) shows your prompts and the agents' replies. Claude Code reports them
+  through the hooks in `claude/.claude/settings.json`, OpenCode through its plugin, and Codex
+  through `~/.codex/hooks.json` (set by `install.sh`; Codex asks once to trust them).
+- **Keeping the repo in sync:** Herdr saves files by replacing them, which breaks Stow's
+  symlinks for the files it writes (layouts, `keys.json`, `rice.json`). After changing things in
+  the app, run `./sync-herdr-app.sh`, review `git status`, and commit.
+- **For agents:** `herdr-app/.config/herdr-app/PERSONAL.md` explains how the personal UI is built
+  (settings system, design rules, gotchas); `claude/.claude/CLAUDE.md` points agents to it.
+
 `iterm/` is not a Stow package: import the color presets from iTerm's settings.
 
 ## Everyday use

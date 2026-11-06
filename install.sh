@@ -62,6 +62,32 @@ open(path, "w").write(text)
 print("Codex terminal title set")
 PY
 
+# 6b. Codex: report your prompts and its replies to the Herdr app's Activity log (the same hook
+#     Claude Code runs, from the herdr-app package). Adds two hooks to ~/.codex/hooks.json and turns
+#     hooks on; everything else in those files stays Codex's. Codex asks once to trust new hooks.
+python3 - "$HOME/.codex/config.toml" "$HOME/.codex/hooks.json" <<'PY'
+import json, os, re, sys
+config, hooks_path = sys.argv[1], sys.argv[2]
+text = open(config).read() if os.path.exists(config) else ""
+if re.search(r"(?m)^hooks\s*=", text):
+    text = re.sub(r"(?m)^hooks\s*=.*$", "hooks = true", text)
+elif re.search(r"(?m)^\[features\]\s*$", text):
+    text = re.sub(r"(?m)^\[features\]\s*$", "[features]\nhooks = true", text, count=1)
+else:
+    text = text.rstrip("\n") + ("\n\n" if text else "") + "[features]\nhooks = true\n"
+open(config, "w").write(text)
+data = json.load(open(hooks_path)) if os.path.exists(hooks_path) else {}
+hooks = data.setdefault("hooks", {})
+for event, kind in (("UserPromptSubmit", "prompt"), ("Stop", "reply")):
+    entries = hooks.setdefault(event, [])
+    if not any("sleek-activity/hook.py" in h.get("command", "") for e in entries for h in e.get("hooks", [])):
+        entries.append({"hooks": [{"type": "command", "timeout": 5,
+            "command": f'python3 -I "$HOME/.config/herdr-app/mods/sleek-activity/hook.py" codex {kind}'}]})
+os.makedirs(os.path.dirname(hooks_path), exist_ok=True)
+open(hooks_path, "w").write(json.dumps(data, indent=2) + "\n")
+print("Codex activity hooks set")
+PY
+
 # 7. Herdr desktop: if its window is already open, show the personal layout.
 if command -v herdr-app >/dev/null 2>&1 && herdr-app status >/dev/null 2>&1; then
   herdr-app do layout.switch --name my-sleek >/dev/null 2>&1 && echo "Herdr: switched to the my-sleek layout"
@@ -78,5 +104,9 @@ Manual steps:
     Cmd-Shift-L until "my-sleek" shows (or: herdr-app do layout.switch --name my-sleek).
     The first time Spotify plays, allow "Herdr wants to control Spotify" so
     the bottom bar can show what's playing.
+    Personal settings (Cmd+, in Herdr) are in ~/.config/herdr-app/rice.json.
+    The wallpaper picker lists ~/Pictures/Images/Wallpapers (change the folder
+    in Settings > Wallpaper); picking a macOS alert sound needs ffmpeg.
+  - Codex: on first start, trust the two new Herdr activity hooks it asks about.
   - Open a new terminal to load the shell config.
 EOF

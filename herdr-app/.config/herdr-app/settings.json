@@ -7,6 +7,7 @@
   },
   "font_ligatures": false,
   "telemetry": false,
-  "minimum_contrast": 1.0,
-  "appearance": "dark"
+  "minimum_contrast": 1,
+  "appearance": "dark",
+  "pane_scrollbars": true
 }

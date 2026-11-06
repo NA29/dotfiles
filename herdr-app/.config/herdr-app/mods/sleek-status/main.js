@@ -7,7 +7,17 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { agents, theme, settings, exec, home, spaces, run } from "herdr";
+import { agents, theme, settings, exec, home, spaces, run, shared } from "herdr";
+
+// Personal settings (my-settings panel): which modules show, the clock format.
+const R = (k, d) => (shared("rice") ?? {})[k] ?? d;
+
+// Personal: cards and pills follow the Cards transparency slider (my-settings).
+const glass = (c) => {
+  const r = shared("rice") ?? {};
+  const p = r["transparency.on"] === false ? 100 : (r["transparency.cards"] ?? 100);
+  return p >= 100 || !/^#[0-9a-f]{6}$/i.test(c) ? c : c + Math.round((p / 100) * 255).toString(16).padStart(2, "0");
+};
 
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
@@ -30,6 +40,7 @@ export default class Status extends View {
   }
 
   sample(cx) {
+    if (!R("bar.cpu", true) && !R("bar.memory", true) && !R("bar.battery", true)) return cx.notify();
     cx.spawn(async (cx) => {
       try {
         const r = await exec("python3", ["-I", `${home()}/.config/herdr-app/mods/sleek-status/stats.py`]);
@@ -67,6 +78,7 @@ export default class Status extends View {
   // What Spotify (or Apple Music) is playing, every 2 s. A player is asked only when it is
   // running (pgrep), so on a Mac without Spotify nothing happens and the module stays hidden.
   readNowPlaying(cx) {
+    if (!R("bar.music", true)) { this.np = null; return; }
     cx.spawn(async (cx) => {
       try {
         const running = async (name) => (await exec("pgrep", ["-x", name])).code === 0;
@@ -110,14 +122,15 @@ export default class Status extends View {
       .when(n.dur > 0, (el) => el
         .child(div().w(W).h(3).flex_none().rounded(2).bg(t.border).child(div().h_full().rounded(2).bg(t.done).w(filled)))
         .child(div().flex_none().text_color(t.dim).child(`${clock(n.pos)} / ${clock(n.dur)}`)))
-      .child(h_flex().flex_none().gap(1).items_center()
+      .when(R("bar.musicControls", true), (el) => el.child(h_flex().flex_none().gap(1).items_center()
         .child(btn("np-prev", "skip-back", "previous track", "Previous"))
         .child(btn("np-play", playing ? "pause" : "play", "playpause", playing ? "Pause" : "Play"))
-        .child(btn("np-next", "skip-forward", "next track", "Next")));
+        .child(btn("np-next", "skip-forward", "next track", "Next"))));
   }
 
   // Today's Wispr Flow numbers (./wispr.py reads its local database, read-only, counts only).
   readWispr(cx) {
+    if (!R("bar.wispr", true)) { this.wispr = null; return; }
     cx.spawn(async (cx) => {
       try {
         const r = await exec("python3", ["-I", `${home()}/.config/herdr-app/mods/sleek-status/wispr.py`]);
@@ -160,29 +173,34 @@ export default class Status extends View {
     // Three anchored zones, like polybar/waybar: left = system, centre = now playing (truly
     // centred: the two sides share the leftover width equally), right = Wispr, then date/time.
     // Nothing drifts when a title or a count changes width; empty zones just stay empty.
-    const system = this.stats ? h_flex().flex_none().gap(12).items_center()
+    const [cpuOn, memOn, batOn] = [R("bar.cpu", true), R("bar.memory", true), R("bar.battery", true)];
+    const system = this.stats && (cpuOn || memOn || (batOn && this.stats.battery != null)) ? h_flex().flex_none().gap(12).items_center()
       // One color per module, red only when critical: cpu foam, memory rose, battery gold.
-      .child(this.meter(t, "mods/sleek-status/cpu.svg", "cpu", this.stats.cpu, this.stats.cpu >= 85 ? t.blocked : t.ansi4))
-      .child(this.meter(t, "mods/sleek-status/memory.svg", "memory", this.stats.mem, this.stats.mem >= 90 ? t.blocked : t.ansi6))
-      .when(this.stats.battery != null, (el) => el.child(this.battery(t, this.stats.battery, this.stats.charging,
+      .when(cpuOn, (el) => el.child(this.meter(t, "mods/sleek-status/cpu.svg", "cpu", this.stats.cpu, this.stats.cpu >= 85 ? t.blocked : t.ansi4)))
+      .when(memOn, (el) => el.child(this.meter(t, "mods/sleek-status/memory.svg", "memory", this.stats.mem, this.stats.mem >= 90 ? t.blocked : t.ansi6)))
+      .when(batOn && this.stats.battery != null, (el) => el.child(this.battery(t, this.stats.battery, this.stats.charging,
         this.stats.battery <= 15 && !this.stats.charging ? t.blocked : t.ansi3))) : null;
+    const h = now.getHours(), mm = String(now.getMinutes()).padStart(2, "0");
+    const time = R("bar.clock24", true) ? `${String(h).padStart(2, "0")}:${mm}` : `${h % 12 || 12}:${mm} ${h < 12 ? "am" : "pm"}`;
+    const [agentsOn, dateOn, timeOn] = [R("bar.agents", true), R("bar.date", true), R("bar.time", true)];
+    const clockShown = (agentsOn && (busy > 0 || needs > 0)) || dateOn || timeOn;
     const clock = h_flex().flex_none().gap(12).items_center()
       // Agent pulse: only when something is going on.
-      .when(busy > 0, (el) => el.child(h_flex().flex_none().gap(4).items_center()
+      .when(agentsOn && busy > 0, (el) => el.child(h_flex().flex_none().gap(4).items_center()
         .child(svg("mods/workspace-chrome/spinner.svg").size(10).text_color(t.working).spin(900))
         .child(div().text_color(t.working).child(String(busy)))))
-      .when(needs > 0, (el) => el.child(div().flex_none().font_bold().text_color(t.blocked).child(`! ${needs}`)))
-      .child(div().flex_none().font_family(SANS).text_color(t.dim).child(date))
+      .when(agentsOn && needs > 0, (el) => el.child(div().flex_none().font_bold().text_color(t.blocked).child(`! ${needs}`)))
+      .when(dateOn, (el) => el.child(div().flex_none().font_family(SANS).text_color(t.dim).child(date)))
       // Time: plain, bright.
-      .child(div().flex_none().text_color(t.foreground).font_semibold().child(now.toTimeString().slice(0, 5)));
+      .when(timeOn, (el) => el.child(div().flex_none().text_color(t.foreground).font_semibold().child(time)));
     // Sleek experiment: each group is a soft pill in the panes' own background on the bar.
-    const pill = (el) => h_flex().flex_none().h(22).px(10).items_center().rounded(8).bg(t.background).child(el);
+    const pill = (el) => h_flex().flex_none().h(24).px(11).items_center().rounded(8).bg(glass(t.background)).child(el);
     return h_flex().size_full().px(8).gap(12).items_center()
-      .font_family(MONO()).text_size(11).text_color(t.muted)
+      .font_family(MONO()).text_size(11.5).text_color(t.muted)
       .child(h_flex().flex_1().min_w(0).items_center().justify_start().when(Boolean(system), (el) => el.child(pill(system))))
-      .child(h_flex().flex_none().items_center().when(Boolean(this.np), (el) => el.child(pill(this.nowPlaying(t)))))
+      .child(h_flex().flex_none().items_center().when(Boolean(this.np) && R("bar.music", true), (el) => el.child(pill(this.nowPlaying(t)))))
       .child(h_flex().flex_1().min_w(0).gap(8).items_center().justify_end()
-        .when(Boolean(this.wispr), (el) => el.child(pill(this.wisprModule(t))))
-        .child(pill(clock)));
+        .when(Boolean(this.wispr) && R("bar.wispr", true), (el) => el.child(pill(this.wisprModule(t))))
+        .when(clockShown, (el) => el.child(pill(clock))));
   }
 }

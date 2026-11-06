@@ -3,14 +3,23 @@
 // `fit` sizes the section's layout block; `bar` is a thin continuous progress bar.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
+import { shared } from "herdr";
+
+// Personal: cards and pills follow the Cards transparency slider (my-settings).
+const glass = (c) => {
+  const r = shared("rice") ?? {};
+  const p = r["transparency.on"] === false ? 100 : (r["transparency.cards"] ?? 100);
+  return p >= 100 || !/^#[0-9a-f]{6}$/i.test(c) ? c : c + Math.round((p / 100) * 255).toString(16).padStart(2, "0");
+};
 
 export const SANS = "Geist";
+export { glass };
 export const tint = (c, a) => /^#[0-9a-f]{6}$/i.test(c) ? c + Math.round(a * 255).toString(16).padStart(2, "0") : c;
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function box(t, { id, title, open, onToggle, summary = [], extra = [], body }) {
   const bits = open ? extra : summary;
-  return v_flex().w_full().flex_none().rounded(10).bg(t.background).p(4)
+  return v_flex().w_full().flex_none().rounded(10).bg(glass(t.background)).p(4)
     // Hovering the header brightens its title and chevron (no nested highlight).
     .child(h_flex().id(`${id}-head`).h(28).px(8).gap(8).items_center().rounded(7).cursor_pointer()
       .text_color(t.muted).hover((h) => h.text_color(t.foreground)).on_click(onToggle)
