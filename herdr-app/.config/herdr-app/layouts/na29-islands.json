@@ -83,7 +83,7 @@
           },
           "min": 44,
           "max": 480,
-          "background": "#16141fb8",
+          "background": "#16141fbd",
           "resizable": false,
           "radius": 10,
           "border": {
@@ -105,7 +105,7 @@
                 "px": 40
               },
               "window_drag": true,
-              "background": "#16141fb8",
+              "background": "#16141fbd",
               "radius": 10,
               "border": {
                 "width": 1,
@@ -177,7 +177,7 @@
                   "min": 280,
                   "max": 900,
                   "hidden": true,
-                  "background": "#16141fb8",
+                  "background": "#16141fbd",
                   "radius": 10,
                   "border": {
                     "width": 1,
@@ -200,7 +200,7 @@
               "size": {
                 "px": 32
               },
-              "background": "#16141fb8",
+              "background": "#16141fbd",
               "radius": 10,
               "border": {
                 "width": 1,
@@ -226,7 +226,7 @@
     }
   ],
   "background": {
-    "image": "backgrounds/hatsune-miku-anime-girl-dream-cosmos-uni-b38626.jpg",
+    "image": "backgrounds/98473741_p0-ee62c4.jpg",
     "fit": "cover"
   },
   "terminal_padding": [
@@ -243,7 +243,7 @@
   "colors": {
     "dim": "#8a86a3",
     "muted": "#aaa6c3",
-    "accent": "#c4a7e7"
+    "accent": "#f6c177"
   },
   "theme": {
     "light": "paper",
