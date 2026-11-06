@@ -16,14 +16,19 @@
 //   keys.json             prefix key, Ctrl+H/J/K/L, Cmd+N, Cmd+,
 
 import { View, div } from "gpui-kit";
-import { appHome, focused, hc, nextCommand, openOverlay, readTextFile, run, setShared, shared, spaces, writeTextFile } from "herdr";
+import { appHome, focused, hc, nextCommand, openOverlay, readTextFile, run, setShared, shared, spaces, theme, writeTextFile } from "herdr";
 
 const KEY = { left: "ctrl+h", down: "ctrl+j", up: "ctrl+k", right: "ctrl+l" };
 const LAYOUT = "na29-islands";
 const LOOK = ["transparency.", "background.", "look.", "terminal.", "panes."];
 const KEYS = ["keys."];
-const CHROME = "#16141f";   // rose-pine chrome: islands' see-through color
-const CARD = "#191724";     // rose-pine background: see-through panes
+// Fallbacks (Rosé Pine) when the theme gives no plain #rrggbb: islands take the theme's
+// chrome, panes its background, each with the transparency sliders' alpha.
+const CHROME = "#16141f";
+const CARD = "#191724";
+const hex6 = (c) => /^#[0-9a-f]{6}/i.test(c ?? "") ? c.slice(0, 7) : null;
+// What of the theme the look depends on: a theme switch rewrites the islands and panes.
+const themeSig = () => { const t = theme(); return `${t.chrome}|${t.background}`; };
 
 // Same as my-settings' DEFAULTS (mods can't import from each other's folders): what a missing
 // key means, so a partial rice.json or shared object never writes a half-empty look.
@@ -41,7 +46,7 @@ const DEFAULTS = {
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": "#c4a7e7", "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
   "panes.header": true,
   "sidebar.activity": true, "sidebar.usage": true,
   "tabs.numbers": true,
@@ -81,6 +86,7 @@ const pick = (r, prefixes) => JSON.stringify(Object.keys(r).filter((k) => prefix
 // The look, written into the layout tree.
 function applyLook(root, r) {
   const on = r["transparency.on"] !== false;
+  const t = theme(), chrome = hex6(t.chrome) ?? CHROME, card = hex6(t.background) ?? CARD;
   const chromePct = on ? r["transparency.chrome"] ?? 80 : 100;
   const panePct = on ? r["transparency.panes"] ?? 100 : 100;
   const gap = r["look.gap"] ?? 6;
@@ -105,7 +111,10 @@ function applyLook(root, r) {
     const dim = r["background.dim"] ?? 0;
     if (dim > 0) frame.background = "#000000" + alpha(dim); else delete frame.background;
   }
-  root.colors = { ...(root.colors ?? {}), accent: r["look.accent"] ?? "#c4a7e7" };
+  // An accent you picked overrides the theme's; none (null) shows the theme's own.
+  root.colors = { ...(root.colors ?? {}) };
+  if (r["look.accent"]) root.colors.accent = r["look.accent"]; else delete root.colors.accent;
+  if (!Object.keys(root.colors).length) delete root.colors;
   const pad = r["terminal.padding"] ?? 14;
   root.terminal_padding = [pad, Math.max(0, pad - 2)];
   if (r["terminal.font"]) root.font = r["terminal.font"]; else delete root.font;
@@ -114,7 +123,7 @@ function applyLook(root, r) {
   for (const id of ["sidebar", "tabs", "status", "panel"]) {
     const n = find(root, id);
     if (!n) continue;
-    n.background = chromePct >= 100 ? "chrome" : CHROME + alpha(chromePct);
+    n.background = chromePct >= 100 ? "chrome" : chrome + alpha(chromePct);
     n.radius = radius;
     if (borders) n.border = border; else delete n.border;
   }
@@ -132,7 +141,7 @@ function applyLook(root, r) {
     else pane.header = { content: { mod: "sleek-pane" }, reveal: "always", height: 30, position: "top" };
     // See-through panes: the frame carries the tint and the terminal paints no background
     // of its own, so the header strip and the terminal are equally see-through.
-    if (panePct < 100) { pane.background = CARD + alpha(panePct); root.terminal_opacity = 0; }
+    if (panePct < 100) { pane.background = card + alpha(panePct); root.terminal_opacity = 0; }
     else { pane.background = "background"; delete root.terminal_opacity; }
   }
   return root;
@@ -189,7 +198,7 @@ export default class MyKeys extends View {
         setShared("rice", { ...full(), ...(text ? JSON.parse(text) : {}) });
       } catch (e) { console.log(`my-keys: rice.json: ${e}`); }
       const r = full();
-      this.applied = { look: pick(r, LOOK), keys: pick(r, KEYS), all: JSON.stringify(r) };
+      this.applied = { look: pick(r, LOOK) + themeSig(), keys: pick(r, KEYS), all: JSON.stringify(r) + themeSig() };
       this.loaded = true;
       cx.notify();
     });
@@ -199,7 +208,7 @@ export default class MyKeys extends View {
   sync(cx) {
     if (!this.loaded || !shared("rice") || this.writing) return;
     const r = full();
-    const now = { look: pick(r, LOOK), keys: pick(r, KEYS), all: JSON.stringify(r) };
+    const now = { look: pick(r, LOOK) + themeSig(), keys: pick(r, KEYS), all: JSON.stringify(r) + themeSig() };
     if (now.all === this.applied.all) return;
     const was = this.applied;
     this.applied = now;

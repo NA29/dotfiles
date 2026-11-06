@@ -36,6 +36,9 @@ then commit.
 - Transparency has three layers: `transparency.chrome` (island backgrounds),
   `transparency.cards` (cards/pills on islands, via a local `glass(color)` helper in each sleek
   mod), `transparency.panes` (pane frame alpha + root `terminal_opacity: 0`). Menus stay opaque.
+- Themes: `themes/*.json` (Rosé Pine plus 13 popular dark ones). `applyLook` builds islands from
+  the active theme's `chrome` and panes from its `background` (it re-applies on a theme switch).
+  `look.accent` null = the theme's own accent; picking a theme in Settings resets it to null.
 
 ## Design rules (agreed with the user)
 

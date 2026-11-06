@@ -35,7 +35,7 @@ const DEFAULTS = {
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": "#c4a7e7", "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
   "panes.header": true,
   "sidebar.activity": true, "sidebar.usage": true,
   "tabs.numbers": true,
@@ -56,8 +56,14 @@ const SECTIONS = [
   ["general", "General", "settings", "Layout, zoom, privacy and maintenance"],
 ];
 
-// Rosé Pine accents and dim wallpaper gradients/solids that sit well behind dark islands.
-const ACCENTS = [["Iris", "#c4a7e7"], ["Rose", "#ebbcba"], ["Foam", "#9ccfd8"], ["Pine", "#3e8fb0"], ["Gold", "#f6c177"], ["Love", "#eb6f92"]];
+// Accents come from the current theme: its own accent ("Theme", the default), then its
+// colours. Dim wallpaper gradients/solids sit well behind dark islands.
+const ACCENT_SLOTS = [["Red", "ansi9"], ["Green", "ansi10"], ["Yellow", "ansi11"], ["Blue", "ansi12"], ["Magenta", "ansi13"], ["Cyan", "ansi14"]];
+// Theme names as people know them; anything else is title-cased from its file name.
+const THEME_NAMES = { "atom-one-dark": "One Dark", "rose-pine": "Rosé Pine", "rose-pine-moon": "Rosé Pine Moon",
+  "catppuccin-mocha": "Catppuccin Mocha", "catppuccin-macchiato": "Catppuccin Macchiato", "catppuccin-frappe": "Catppuccin Frappé",
+  "tokyo-night": "Tokyo Night", "tokyo-night-storm": "Tokyo Night Storm", "github-dark": "GitHub Dark" };
+const themeName = (n) => THEME_NAMES[n] ?? n.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 const GRADIENTS = [
   ["Dusk", ["#342d40", "#162a37", 145]], ["Rose", ["#3d2a3a", "#17151f", 150]],
   ["Pine", ["#1b3440", "#131120", 160]], ["Gold", ["#3a3024", "#16141f", 150]],
@@ -326,13 +332,20 @@ export default class MySettings extends View {
       ]),
 
       this.group("Colour", [
-        this.row("Accent", "Marks where you are: the focused pane, the current tab and space.",
-          h_flex().gap(8).children(ACCENTS.map(([name, hex]) => {
-            const sel = c["look.accent"]?.toLowerCase() === hex;
-            return div().id(`acc-${name}`).size(24).rounded(12).cursor_pointer().bg(hex).tooltip(name)
-              .border_2().border_color(sel ? t.foreground : "#00000000")
-              .on_click((_e, cx) => { set({ "look.accent": hex }); cx.notify(); });
-          }))),
+        this.row("Accent", "Marks where you are: the focused pane, the current tab and space. The first is the theme's own.",
+          h_flex().gap(8).children((() => {
+            const own = themes().find((th) => th.name === current)?.colors ?? t;
+            const picked = c["look.accent"]?.toLowerCase() ?? null;
+            const seen = new Set();
+            const list = [["Theme", own.accent, null], ...ACCENT_SLOTS.map(([name, slot]) => [name, own[slot], own[slot]])]
+              .filter(([, hex]) => /^#[0-9a-f]{6}/i.test(hex ?? "") && !seen.has(hex.slice(0, 7).toLowerCase()) && seen.add(hex.slice(0, 7).toLowerCase()));
+            return list.map(([name, hex, value]) => {
+              const sel = value === null ? !picked : picked === value.slice(0, 7).toLowerCase();
+              return div().id(`acc-${name}`).size(24).rounded(12).cursor_pointer().bg(hex.slice(0, 7)).tooltip(name === "Theme" ? "The theme's accent" : name)
+                .border_2().border_color(sel ? t.foreground : "#00000000")
+                .on_click((_e, cx) => { set({ "look.accent": value ? value.slice(0, 7) : null }); cx.notify(); });
+            });
+          })())),
         this.row("Theme", null, null),
         this.pad(h_flex().flex_wrap().gap(8).children(shownThemes.map((th) => {
           const sel = th.name === current;
@@ -340,9 +353,10 @@ export default class MySettings extends View {
           return h_flex().id(`theme-${th.name}`).h(32).px(10).gap(8).items_center().rounded(8).border_1().cursor_pointer()
             .border_color(sel ? t.accent : t.border).when(sel, (el) => el.bg(tint(t.accent, 0.1)))
             .hover((h) => h.border_color(sel ? t.accent : t.muted))
-            .on_click((_e, cx) => { run("app.theme", { name: th.name }); cx.notify(); })
+            // A new theme brings its own accent (a picked one would clash with it).
+            .on_click((_e, cx) => { run("app.theme", { name: th.name }); set({ "look.accent": null }); cx.notify(); })
             .child(h_flex().gap(3).children(dots.map((d) => div().size(9).rounded(5).bg(d).border_1().border_color(tint("#ffffff", 0.12)))))
-            .child(div().font_family(SANS).text_size(12).text_color(sel ? t.foreground : t.muted).child(th.name));
+            .child(div().font_family(SANS).text_size(12).text_color(sel ? t.foreground : t.muted).child(themeName(th.name)));
         }))),
         this.row("Appearance", "Dark always, light always, or follow macOS.",
           this.seg("appearance", [["dark", "Dark"], ["light", "Light"], [null, "System"]], s.appearance ?? null,
