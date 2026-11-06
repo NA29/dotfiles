@@ -22,7 +22,7 @@ Each top-level folder is a Stow package; its contents mirror paths under `~`.
 | `tmux/` | `~/.config/tmux/tmux.conf` |
 | `nvim/` | `~/.config/nvim/` |
 | `herdr/` | `~/.config/herdr/config.toml`, `sounds/` (Herdr TUI) |
-| `herdr-app/` | `~/.config/herdr-app/`: Herdr desktop app keys, settings, Rosé Pine theme, layouts (`my-sleek` is the main one), sounds and personal panels (`mods/my-*`, `mods/sleek-*`, `mods/tmux-prefix`) |
+| `herdr-app/` | `~/.config/herdr-app/`: Herdr desktop app keys, settings, Rosé Pine theme, layouts (`na29-islands` is the main one), sounds and personal panels (`mods/my-*`, `mods/sleek-*`, `mods/tmux-prefix`) |
 | `opencode/` | `~/.config/opencode/herdr-app-status.js` + `tui.jsonc`: OpenCode reports its status to Herdr |
 | `claude/` | `~/.claude/CLAUDE.md`, `settings.json`, `statusline.sh`, `hooks/`, `skills/` |
 
@@ -33,7 +33,7 @@ Each top-level folder is a Stow package; its contents mirror paths under `~`.
 
 Herdr writes runtime state next to its config (window position, activity history, generated
 type files); only the config above is tracked. After installing, open Herdr once and switch to
-the personal layout with Cmd-Shift-L (or `herdr-app do layout.switch --name my-sleek`). The
+the personal layout with Cmd-Shift-L (or `herdr-app do layout.switch --name na29-islands`). The
 bottom bar asks macOS for permission to control Spotify the first time music plays; Wispr Flow
 stats and battery only show when those exist on the machine.
 

@@ -7,12 +7,12 @@ then commit.
 
 ## What's shown
 
-- Layout **`layouts/my-sleek.json`** ("islands"): root `background` (wallpaper) → one row `dim`
+- Layout **`layouts/na29-islands.json`** ("islands"): root `background` (wallpaper) → one row `dim`
   (a see-through black layer that dims the wallpaper; it holds the gaps as `padding`/`gap`) →
   `sidebar` column, `work` column (`tabs` strip, `work-body` with the panes and the Files/Changes
   `panel`, `status` bar, and a zero-height `my-keys` block).
 - `my-combined` and `my-main` are older personal layouts, kept as fallbacks.
-- Mods used by my-sleek: `sleek-workspaces` (spaces + their agents), `sleek-activity` (activity
+- Mods used by na29-islands: `sleek-workspaces` (spaces + their agents), `sleek-activity` (activity
   card; also the Activity log dialog), `sleek-usage` (5h/7d limits), `sleek-tabs`, `sleek-status`
   (bottom bar: CPU/memory/battery, now playing, Wispr Flow, clock), `sleek-pane` (pane header),
   `sleek-chrome` (brand row + footer buttons), `my-keys` (key actions + settings writer).
@@ -26,7 +26,7 @@ then commit.
   `look.*`, `bar.*`, `keys.*`, `activity.*`, `usage.*`, `tabs.*`, `panes.header`, ...).
 - At start `my-keys` loads it into shared state `"rice"`. The Settings panel only calls
   `setShared("rice", …)`; `my-keys` is the **single writer**: it writes `rice.json`, the look into
-  `layouts/my-sleek.json` (`applyLook`) and keys into `keys.json` (`applyKeys`).
+  `layouts/na29-islands.json` (`applyLook`) and keys into `keys.json` (`applyKeys`).
 - Consumers read live: `const R = (k, d) => (shared("rice") ?? {})[k] ?? d`.
 - `DEFAULTS` exist in **both** `my-settings/main.js` and `my-keys/main.js` (mods can't import
   from another mod's folder). Add a new key to both.

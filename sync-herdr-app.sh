@@ -25,7 +25,7 @@ for mod in "$SRC"/mods/my-* "$SRC"/mods/sleek-* "$SRC"/mods/tmux-prefix; do
   rsync -a --delete "${EXCLUDE[@]}" "$mod/" "$DST/mods/$name/"
 done
 
-for f in PERSONAL.md keys.json settings.json rice.json themes/rose-pine.json layouts/my-sleek.json layouts/my-combined.json layouts/my-main.json; do
+for f in PERSONAL.md keys.json settings.json rice.json themes/rose-pine.json layouts/na29-islands.json layouts/my-combined.json layouts/my-main.json; do
   [[ -f "$SRC/$f" ]] || continue
   mkdir -p "$(dirname "$DST/$f")"
   copy "$SRC/$f" "$DST/$f"

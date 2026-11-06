@@ -90,7 +90,7 @@ PY
 
 # 7. Herdr desktop: if its window is already open, show the personal layout.
 if command -v herdr-app >/dev/null 2>&1 && herdr-app status >/dev/null 2>&1; then
-  herdr-app do layout.switch --name my-sleek >/dev/null 2>&1 && echo "Herdr: switched to the my-sleek layout"
+  herdr-app do layout.switch --name na29-islands >/dev/null 2>&1 && echo "Herdr: switched to the na29-islands layout"
 fi
 
 cat <<'EOF'
@@ -101,7 +101,7 @@ Manual steps:
     JetBrains Mono Nerd Font, Left Option = Esc+).
   - Herdr: run `herdr` once; Claude integration hooks are already linked.
   - Herdr desktop app: open it once, then pick the personal layout with
-    Cmd-Shift-L until "my-sleek" shows (or: herdr-app do layout.switch --name my-sleek).
+    Cmd-Shift-L until "na29-islands" shows (or: herdr-app do layout.switch --name na29-islands).
     The first time Spotify plays, allow "Herdr wants to control Spotify" so
     the bottom bar can show what's playing.
     Personal settings (Cmd+, in Herdr) are in ~/.config/herdr-app/rice.json.

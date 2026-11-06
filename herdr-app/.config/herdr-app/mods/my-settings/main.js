@@ -3,7 +3,7 @@
 //
 // Where each setting goes:
 //   shared "rice" (+ rice.json)  personal settings. The my-keys copy writes them out: the look
-//                                into layouts/my-sleek.json, keys into keys.json, all of it into
+//                                into layouts/na29-islands.json, keys into keys.json, all of it into
 //                                rice.json. The sidebar and bar mods read their own keys live.
 //   settings.json                Herdr's own: sounds, zoom, ligatures, contrast, appearance…
 //   layout commands              sizes (sidebar width, bar heights) and shown/hidden sections.

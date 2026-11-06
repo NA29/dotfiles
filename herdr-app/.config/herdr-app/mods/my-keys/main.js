@@ -5,13 +5,13 @@
 //               when there is none (one pane, or at the edge), the key goes to the program
 //               instead, so Ctrl+L still clears, Ctrl+K still kills the line, and so on.
 //   toggle-transparency   flip "transparency.on" (Ctrl+A t does the same)
-// Lives in a zero-height block in my-main, my-combined and my-sleek, so it works while the
+// Lives in a zero-height block in my-main, my-combined and na29-islands, so it works while the
 // sidebar is hidden.
 //
 // It is also the settings writer. The my-settings panel (and Ctrl+A t) only change the shared
 // "rice" object; this copy notices and writes the files:
 //   rice.json             every personal setting (tracked in dotfiles; loaded at start)
-//   layouts/my-sleek.json the look: background, transparency, gaps, corners, borders, accent,
+//   layouts/na29-islands.json the look: background, transparency, gaps, corners, borders, accent,
 //                         terminal font/size/padding, pane headers
 //   keys.json             prefix key, Ctrl+H/J/K/L, Cmd+N, Cmd+,
 
@@ -19,7 +19,7 @@ import { View, div } from "gpui-kit";
 import { appHome, focused, hc, nextCommand, openOverlay, readTextFile, run, setShared, shared, spaces, writeTextFile } from "herdr";
 
 const KEY = { left: "ctrl+h", down: "ctrl+j", up: "ctrl+k", right: "ctrl+l" };
-const LAYOUT = "my-sleek";
+const LAYOUT = "na29-islands";
 const LOOK = ["transparency.", "background.", "look.", "terminal.", "panes."];
 const KEYS = ["keys."];
 const CHROME = "#16141f";   // rose-pine chrome: islands' see-through color
