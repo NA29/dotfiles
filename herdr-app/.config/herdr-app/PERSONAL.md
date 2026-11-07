@@ -33,6 +33,10 @@ then commit.
   from another mod's folder). Add a new key to both.
 - Herdr's own preferences (sounds, zoom, ligatures, contrast...) go in `settings.json`; sizes and
   shown/hidden sections go through `layout.resize` / `layout.show` / `layout.hide`.
+- Square corners: `look.square` (Settings → Shape) sets island/pane radius to 0 (`applyLook`) and, in
+  every personal mod, a small block after the imports patches `.rounded*(n)` on the shared element
+  prototype to draw 0 while it's on (`.rounded_full` circles stay round). Add that block to new mods.
+  Herdr-drawn overlay frames (dialogs without `frame: "none"`, Herdr's own menus) stay rounded.
 - Transparency has three layers: `transparency.chrome` (island backgrounds),
   `transparency.cards` (cards/pills on islands, via a local `glass(color)` helper in each sleek
   mod), `transparency.panes` (pane frame alpha + root `terminal_opacity: 0`). Menus stay opaque.

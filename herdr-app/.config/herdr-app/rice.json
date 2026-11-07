@@ -38,6 +38,7 @@
   "look.focusRing": true,
   "look.gap": 5,
   "look.radius": 10,
+  "look.square": false,
   "panes.header": false,
   "sidebar.activity": true,
   "sidebar.usage": true,

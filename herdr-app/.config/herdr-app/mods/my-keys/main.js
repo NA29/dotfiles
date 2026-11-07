@@ -46,7 +46,7 @@ const DEFAULTS = {
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
   "panes.header": true,
   "sidebar.activity": true, "sidebar.usage": true,
   "tabs.numbers": true,
@@ -90,7 +90,7 @@ function applyLook(root, r) {
   const chromePct = on ? r["transparency.chrome"] ?? 80 : 100;
   const panePct = on ? r["transparency.panes"] ?? 100 : 100;
   const gap = r["look.gap"] ?? 6;
-  const radius = r["look.radius"] ?? 10;
+  const radius = r["look.square"] ? 0 : r["look.radius"] ?? 10;
   const borders = r["look.borders"] !== false;
   const border = { width: 1, color: "border" };
 

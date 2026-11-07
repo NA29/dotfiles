@@ -1,6 +1,21 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, shared } from "herdr";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
+
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
 
 // Personal (cloned from Herdr's `changes`): restyled like the sidebar. The island (layout block
 // "panel") carries the chrome; this draws glass cards on it, Geist words and Geist Mono numbers;

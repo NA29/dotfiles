@@ -15,6 +15,21 @@ import {
   theme, themes, run, props, closeOverlay, shared, setShared, settings, layout, layouts, fonts,
   exec, appHome, home, readTextFile, writeTextFile, playSound, pickFolder, updates,
 } from "herdr";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
+
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
 
 const MONO = "Geist Mono";
 const SANS = "Geist";
@@ -35,7 +50,7 @@ const DEFAULTS = {
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
   "panes.header": true,
   "sidebar.activity": true, "sidebar.usage": true,
   "tabs.numbers": true,
@@ -363,7 +378,8 @@ export default class MySettings extends View {
             (v, cx) => this.saveSettings(cx, (o) => { if (v) o.appearance = v; else delete o.appearance; }))),
       ]),
       this.group("Shape", [
-        this.row("Corners", "Roundness of the islands and panes.", this.slider("radius", px)),
+        this.row("Square corners", "Everything square: islands, panes, cards, pills and menus.", this.toggle("square", c["look.square"], (v) => set({ "look.square": v }))),
+        this.row("Corners", "Roundness of the islands and panes (when not square).", this.slider("radius", px)),
         this.row("Gaps", "Space around and between the islands; more shows more wallpaper.", this.slider("gap", px)),
         this.row("Borders", "A hairline around each island and pane.", this.toggle("borders", c["look.borders"], (v) => set({ "look.borders": v }))),
         this.row("Focus ring", "Outline the focused pane in the accent colour.", this.toggle("focus", c["look.focusRing"], (v) => set({ "look.focusRing": v }))),
