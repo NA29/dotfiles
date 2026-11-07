@@ -411,9 +411,27 @@ export default class Activity extends View {
     const per = 50;
     const vis = Math.max(3, Math.floor(this.listH / per));
     const cost = (i) => (i === this.expanded ? 6 : list[i]?.prompt ? 1.25 : 1);
-    if (this.at < this.top) this.top = this.at;
     const span = () => { let s = 0; for (let i = this.top; i <= this.at; i++) s += cost(i); return s; };
-    while (this.top < this.at && span() > vis) this.top++;
+    if (this.scrolled) {
+      // The wheel moved the view: keep the view (never past the last full page) and pull the
+      // selection into it only if it went out of sight, like a normal scrolling list.
+      this.scrolled = false;
+      let lastTop = Math.max(0, list.length - 1), tail = list.length ? cost(lastTop) : 0;
+      while (lastTop > 0 && tail + cost(lastTop - 1) <= vis) { lastTop--; tail += cost(lastTop); }
+      this.top = Math.max(0, Math.min(this.top, lastTop));
+      if (this.at < this.top) this.at = this.top;
+      while (this.at > this.top && span() > vis) this.at--;
+    } else {
+      // The keys moved the selection: move the view to keep it in sight.
+      if (this.at < this.top) this.top = this.at;
+      while (this.top < this.at && span() > vis) this.top++;
+    }
+    let total = 0, before = 0;
+    for (let i = 0; i < list.length; i++) { total += cost(i); if (i < this.top) before += cost(i); }
+    const bar = total > vis ? (() => {
+      const h = Math.max(24, this.listH * vis / total);
+      return { h, top: (this.listH - h) * Math.min(1, before / (total - vis)) };
+    })() : null;
     const shown = [];
     let used = 0;
     for (let i = this.top; i < list.length && used < vis + 1; i++) { shown.push(i); used += cost(i); }
@@ -497,14 +515,31 @@ export default class Activity extends View {
         .child(h_flex().gap(6).flex_wrap().children(["all", ...STATES].map(chip)))
         .child(this.confirming ? this.confirmPanel(t, all.length)
           : v_flex().id("act-log-list").flex_1().min_h(0).overflow_hidden().gap(2)
+            .relative()
+            // Room for the position marker, so it sits beside the entries instead of over them.
+            .when(Boolean(bar), (el) => el.pr(12))
             .on_size_change((size, cx) => { if (Math.abs(size.height - this.listH) > 4) { this.listH = size.height; cx.notify(); } })
+            // Scrolls the view, not the selection. A trackpad sends many small events per swipe:
+            // move one entry per row's height of travel (a mouse wheel: one entry per line).
             .on_scroll_wheel((e, cx) => {
-              if (Math.abs(e.delta.y) < 1) return;
-              this.at = Math.max(0, Math.min(list.length - 1, this.at + (e.delta.y > 0 ? -1 : 1)));
+              if (e.touch_phase === "started") this.wheel = 0;
+              const lines = e.delta_lines?.y;
+              const d = lines ? lines * per : e.delta.y;
+              if ((this.wheel ?? 0) * d < 0) this.wheel = 0; // direction changed
+              this.wheel = (this.wheel ?? 0) + d;
+              const steps = Math.trunc(this.wheel / per);
+              if (!steps) return;
+              this.wheel -= steps * per;
+              this.top = Math.max(0, Math.min(list.length - 1, this.top - steps));
+              this.scrolled = true;
               cx.notify();
             })
             .children(items.length ? items : [div().py(24).px(12).font_family(SANS).text_color(t.dim)
-              .child(words.length ? `Nothing matches “${this.query}”` : this.filter === "all" ? "Nothing yet: runs show up here as your agents work." : `No "${this.filter}" runs yet.`)]))
+              .child(words.length ? `Nothing matches “${this.query}”` : this.filter === "all" ? "Nothing yet: runs show up here as your agents work." : `No "${this.filter}" runs yet.`)])
+            // A slim position marker when the log is longer than the view, as in Go to. Sized and
+            // placed by entries (an expanded one counts as several), since the log moves by entry.
+            .when(Boolean(bar), (el) => el.child(div().absolute().right(3).w(3).rounded(2).bg(tint(t.foreground, 0.15))
+              .h(bar.h).top(bar.top))))
         // Footer: the keys, like Go to's.
         .child(h_flex().h(30).flex_none().px(8).gap(14).items_center().font_family(SANS).text_size(11).text_color(t.dim)
           .when(this.mode === "normal", (el) => el
