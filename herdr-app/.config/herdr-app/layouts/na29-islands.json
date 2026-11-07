@@ -1,0 +1,244 @@
+{
+  "id": "root",
+  "cloned_from": {
+    "name": "my-combined",
+    "version": "0.1.13"
+  },
+  "type": "row",
+  "children": [
+    {
+      "id": "dim",
+      "type": "row",
+      "padding": 5,
+      "gap": 5,
+      "children": [
+        {
+          "id": "sidebar",
+          "type": "column",
+          "children": [
+            {
+              "id": "brand",
+              "type": "block",
+              "content": {
+                "mod": "sleek-chrome"
+              },
+              "size": {
+                "px": 46
+              },
+              "window_drag": true
+            },
+            {
+              "id": "sidebar-lists",
+              "type": "column",
+              "children": [
+                {
+                  "id": "spaces",
+                  "type": "block",
+                  "content": {
+                    "mod": "sleek-workspaces"
+                  },
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 90
+                },
+                {
+                  "id": "activity",
+                  "type": "block",
+                  "content": {
+                    "mod": "sleek-activity"
+                  },
+                  "size": {
+                    "px": 60
+                  }
+                },
+                {
+                  "id": "usage",
+                  "type": "block",
+                  "content": {
+                    "mod": "sleek-usage"
+                  },
+                  "size": {
+                    "px": 164
+                  }
+                }
+              ]
+            },
+            {
+              "id": "sidebar-footer",
+              "type": "block",
+              "content": {
+                "mod": "sleek-chrome",
+                "props": {
+                  "footer": true
+                }
+              },
+              "size": {
+                "px": 40
+              }
+            }
+          ],
+          "size": {
+            "px": 268
+          },
+          "min": 44,
+          "max": 480,
+          "background": "#010409b3",
+          "resizable": false,
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "border"
+          }
+        },
+        {
+          "id": "work",
+          "type": "column",
+          "children": [
+            {
+              "id": "tabs",
+              "type": "block",
+              "content": {
+                "mod": "sleek-tabs"
+              },
+              "size": {
+                "px": 40
+              },
+              "window_drag": true,
+              "background": "#010409b3",
+              "radius": 10,
+              "border": {
+                "width": 1,
+                "color": "border"
+              }
+            },
+            {
+              "id": "work-body",
+              "type": "row",
+              "children": [
+                {
+                  "id": "main",
+                  "type": "block",
+                  "content": {
+                    "tab": "active",
+                    "pane": {
+                      "background": "#0d1117d9",
+                      "focus": {
+                        "width": 1,
+                        "color": "accent"
+                      },
+                      "radius": 10,
+                      "gap": 5,
+                      "lone": true,
+                      "border": {
+                        "width": 1,
+                        "color": "border"
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "panel",
+                  "type": "column",
+                  "children": [
+                    {
+                      "id": "panel-body",
+                      "type": "stack",
+                      "children": [
+                        {
+                          "id": "files",
+                          "type": "block",
+                          "content": {
+                            "mod": "sleek-files"
+                          }
+                        },
+                        {
+                          "id": "changes",
+                          "type": "block",
+                          "content": {
+                            "mod": "sleek-changes"
+                          }
+                        }
+                      ],
+                      "active": "files"
+                    }
+                  ],
+                  "size": {
+                    "px": 368
+                  },
+                  "min": 280,
+                  "max": 900,
+                  "hidden": true,
+                  "background": "#010409b3",
+                  "radius": 10,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  }
+                }
+              ],
+              "padding": [
+                5,
+                0
+              ],
+              "gap": 5
+            },
+            {
+              "id": "status",
+              "type": "block",
+              "content": {
+                "mod": "sleek-status"
+              },
+              "size": {
+                "px": 32
+              },
+              "background": "#010409b3",
+              "radius": 10,
+              "border": {
+                "width": 1,
+                "color": "border"
+              }
+            },
+            {
+              "id": "my-keys",
+              "type": "block",
+              "content": {
+                "mod": "my-keys"
+              },
+              "size": {
+                "px": 0
+              }
+            }
+          ],
+          "resizable": false,
+          "gap": 0
+        }
+      ],
+      "background": "#000000b3"
+    }
+  ],
+  "background": {
+    "image": "backgrounds/98473741_p0-ee62c4.jpg",
+    "fit": "cover"
+  },
+  "terminal_padding": [
+    14,
+    12
+  ],
+  "titlebar": "none",
+  "traffic_lights": [
+    18,
+    20
+  ],
+  "padding": 0,
+  "gap": 0,
+  "colors": {
+    "dim": "#8a86a3",
+    "muted": "#aaa6c3"
+  },
+  "theme": {
+    "light": "paper",
+    "dark": "rose-pine"
+  },
+  "terminal_opacity": 0
+}

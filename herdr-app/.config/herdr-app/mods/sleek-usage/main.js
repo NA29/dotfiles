@@ -8,8 +8,26 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, exec, home, readTextFile, run, settings, theme, layout } from "herdr";
-import { box, bar as thinBar, pctColor } from "./box.js";
+import { agents, exec, home, readTextFile, run, settings, theme, layout, shared } from "herdr";
+
+// Personal settings (my-settings panel): which providers, and when they show.
+const R = (k, d) => (shared("rice") ?? {})[k] ?? d;
+import { box, bar as thinBar, pctColor, glass } from "./box.js";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
+
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
 
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
@@ -94,12 +112,18 @@ export default class Usage extends View {
     const data = readings(this.raw.claude, this.raw.codex, now);
     return PROVIDERS
       .map((p) => ({ ...p, data: data[p.id], live: live.has(p.app) }))
-      .filter((p) => (p.data && now - (p.data.at ?? 0) < WEEK) || p.live);
+      .filter((p) => R(`usage.${p.id}`, true))
+      .filter((p) => {
+        const mode = R("usage.mode", "recent");
+        if (mode === "always") return true;
+        if (mode === "live") return p.live;
+        return (p.data && now - (p.data.at ?? 0) < WEEK) || p.live;
+      });
   }
 
   // The block is as tall as its providers: the edge, then each provider's three lines.
   fit() {
-    const n = this.shown(Math.floor(Date.now() / 1000)).length;
+    const n = R("sidebar.usage", true) === false ? 0 : this.shown(Math.floor(Date.now() / 1000)).length;
     const px = !n ? 0 : this.narrow ? 8 + 8 + n * 24 + 4 : this.folded ? 52 : 52 + n * 62;
     const node = find(layout(), "usage");
     if (node && node.size?.px !== px) run(px ? "layout.show" : "layout.hide", { id: "usage" });
@@ -161,7 +185,7 @@ export default class Usage extends View {
     // Narrow sidebar: each agent's icon and 5-hour use, colored like its bar.
     if (this.narrow) {
       return watch(v_flex().id("root").size_full().min_h(0).px(6).pt(8).font_family(MONO()).text_size(10.5))
-        .child(v_flex().id("usage-rail").w_full().py(4).rounded(10).bg(t.background).tooltip("Usage (5-hour)")
+        .child(v_flex().id("usage-rail").w_full().py(4).rounded(10).bg(glass(t.background)).tooltip("Usage (5-hour)")
           .children(list.map((p) => {
             const used = p.data?.five?.used;
             const pic = p.icon ? image(p.icon).w(12).h(12).flex_none() : null;

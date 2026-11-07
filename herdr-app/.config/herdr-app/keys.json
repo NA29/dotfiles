@@ -17,7 +17,7 @@
     "cmd-n": "my-keys.new-space",
     "cmd-p": "mod.open:my-goto",
     "cmd-shift-p": "app.palette",
-    "cmd-,": "app.settings",
+    "cmd-,": "mod.open:my-settings",
     "cmd-d": "pane.split:right",
     "cmd-shift-d": "pane.split:down",
     "cmd-shift-w": "pane.close",
@@ -57,11 +57,11 @@
     "ctrl-7": "space.select:7",
     "ctrl-8": "space.select:8",
     "ctrl-9": "space.select:9",
-    "ctrl-a": "mod.open:tmux-prefix",
     "ctrl-h": "my-keys.go-left",
     "ctrl-j": "my-keys.go-down",
     "ctrl-k": "my-keys.go-up",
-    "ctrl-l": "my-keys.go-right"
+    "ctrl-l": "my-keys.go-right",
+    "ctrl-a": "mod.open:tmux-prefix"
   },
   "terminal": {
     "cmd-f": "terminal.search",
@@ -74,11 +74,11 @@
     "cmd-left": "send:\u0001",
     "cmd-right": "send:\u0005",
     "cmd-backspace": "send:\u0015",
-    "ctrl-a": "mod.open:tmux-prefix",
     "ctrl-h": "my-keys.go-left",
     "ctrl-j": "my-keys.go-down",
     "ctrl-k": "my-keys.go-up",
-    "ctrl-l": "my-keys.go-right"
+    "ctrl-l": "my-keys.go-right",
+    "ctrl-a": "mod.open:tmux-prefix"
   },
   "mod:tmux-prefix": {
     "ctrl-a": "tmux-prefix.send-prefix"

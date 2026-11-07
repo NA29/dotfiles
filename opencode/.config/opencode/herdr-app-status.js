@@ -13,6 +13,8 @@
 // Claude Code sends too), so the agent leaves the list even though the shell stays.
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const APP = "opencode";
 
@@ -45,6 +47,26 @@ function makeReporter() {
   return { report, close };
 }
 
+// For the Herdr app's Activity log: your prompt and OpenCode's final reply, one JSON line each in
+// ~/.cache/herdr-activity/<HC_TERMINAL_ID>.jsonl (the same records the Claude Code and Codex hooks
+// write, mods/sleek-activity/hook.py). Best effort: never throws.
+function makeRecorder() {
+  const file = path.join(os.homedir(), ".cache", "herdr-activity", `${process.env.HC_TERMINAL_ID}.jsonl`);
+  return (kind, text) => {
+    try {
+      text = String(text ?? "").trim();
+      if (!text) return;
+      const record = { at: Date.now(), agent: "opencode", kind, text: text.slice(0, kind === "prompt" ? 4000 : 3000), cwd: process.cwd(), terminal: process.env.HC_TERMINAL_ID };
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      let lines = [];
+      try { lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).slice(-59); } catch {}
+      lines.push(JSON.stringify(record));
+      fs.writeFileSync(file + ".tmp", lines.join("\n") + "\n");
+      fs.renameSync(file + ".tmp", file);
+    } catch {}
+  };
+}
+
 function inHerdrCore() {
   return Boolean(process.env.HC_TERMINAL_ID);
 }
@@ -59,13 +81,23 @@ async function tui(api) {
 
   const publish = () => report(blockers.size || errors.size ? "blocked" : busy.size ? "working" : "idle");
 
+  // Activity log: message texts from their parts; the prompt once the reply starts, the reply at idle.
+  const record = makeRecorder();
+  const roles = new Map();      // messageID -> "user" | "assistant"
+  const parts = new Map();      // messageID -> Map(partID -> text)
+  const lastUser = new Map();   // sessionID -> messageID
+  const lastReply = new Map();  // sessionID -> messageID
+  const recorded = new Set();   // messageIDs already written
+  const textOf = (id) => [...(parts.get(id)?.values() ?? [])].join("\n");
+  const flush = (id, kind) => { if (id && !recorded.has(id) && textOf(id)) { recorded.add(id); record(kind, textOf(id)); } };
+
   const handlers = {
     "session.status": (p) => {
       const kind = typeof p.status === "string" ? p.status : p.status?.type;
       if (kind === "busy" || kind === "retry") { busy.add(p.sessionID); errors.delete(p.sessionID); }
-      else if (kind === "idle") busy.delete(p.sessionID);
+      else if (kind === "idle") { if (busy.has(p.sessionID)) flush(lastReply.get(p.sessionID), "reply"); busy.delete(p.sessionID); }
     },
-    "session.idle": (p) => busy.delete(p.sessionID),
+    "session.idle": (p) => { if (busy.has(p.sessionID)) flush(lastReply.get(p.sessionID), "reply"); busy.delete(p.sessionID); },
     "session.error": (p) => {
       if (p.error?.name !== "MessageAbortedError" && p.sessionID) errors.add(p.sessionID);
       busy.delete(p.sessionID);
@@ -82,7 +114,20 @@ async function tui(api) {
     "question.replied": (p) => blockers.delete(`question:${p.requestID}`),
     "question.rejected": (p) => blockers.delete(`question:${p.requestID}`),
     // A new prompt clears an old error.
-    "message.updated": (p) => { if (p.info?.role === "user" && p.info?.sessionID) errors.delete(p.info.sessionID); },
+    "message.updated": (p) => {
+      const info = p.info ?? {};
+      if (info.role === "user" && info.sessionID) errors.delete(info.sessionID);
+      if (!info.id || !info.sessionID) return;
+      roles.set(info.id, info.role);
+      if (info.role === "user") lastUser.set(info.sessionID, info.id);
+      else if (info.role === "assistant") { lastReply.set(info.sessionID, info.id); flush(lastUser.get(info.sessionID), "prompt"); }
+    },
+    "message.part.updated": (p) => {
+      const part = p.part ?? {};
+      if (part.type !== "text" || part.synthetic || !part.messageID) return;
+      if (!parts.has(part.messageID)) parts.set(part.messageID, new Map());
+      parts.get(part.messageID).set(part.id ?? "0", part.text ?? "");
+    },
   };
 
   const subscriptions = Object.entries(handlers).map(([type, handle]) =>

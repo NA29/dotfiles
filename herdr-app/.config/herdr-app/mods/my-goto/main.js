@@ -3,18 +3,36 @@
 //   Needs you   tabs whose agents are blocked or finished, first
 //   Spaces      every space (Enter on its header goes there) and its tabs, with agents
 //   Actions     new tab/space, rename, settings, sidebar; shortcuts read from keys.json
-// Type to filter (every word must match), ↑/↓ or ⌃N/⌃P to move, Enter to go,
-// ⌃D to close the selected tab, Esc to leave. Frameless and translucent like tmux-prefix.
+// Vim-style modes, set by the field itself: a leading "/" means search (insert) mode.
+// Normal (on open, empty field): j/k move, l or Enter opens, h jumps up to the space, gg/G
+// top/bottom, ⌃D/⌃U half a page, x closes the selected tab, q leaves, / starts a search.
+// Insert ("/…" in the field): type to filter (every word must match), ↑/↓ or ⌃N/⌃P move,
+// Enter opens; Backspace over the "/" goes back to normal. Esc always leaves.
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { agents, spaces, panes, run, hc, theme, keys, props, closeOverlay, openOverlay, shared, setShared, home } from "herdr";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
 
-// Personal: a tab's label. A name you gave it wins; else what's in it: the agent's session
-// name (from its terminal title), else the program running ("nvim"), else the shell's
-// folder. Herdr's own name for an unnamed tab is just its number.
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
+
+// Personal: a tab's label, the same name the sidebar shows. An agent's session name (from
+// its terminal title) wins; else a name you gave the tab; else what's in it: a program's
+// telling title or name ("nvim"), else the shell's folder. Herdr's own name for an unnamed
+// tab is just its number.
 function tabLabel(tab, ps, homeDir) {
-  if (tab.named) return tab.name;
   const mine = ps.filter((p) => p.tab === tab.id && p.terminal);
   const lead = mine.find((p) => p.program?.agent) ?? mine.find((p) => p.focused) ?? mine[0];
   if (!lead) return tab.name;
@@ -27,9 +45,12 @@ function tabLabel(tab, ps, homeDir) {
     const said = [lead.program?.name, lead.program?.key, lead.app].filter(Boolean).map((x) => x.toLowerCase());
     const generic = !raw || said.includes(low) || low === base(lead.cwd).toLowerCase() || /^[~/]/.test(raw) || raw.includes("@")
       || /^(claude( code)?|codex|open ?code|shell)$/.test(low) || /^new session\b/.test(low);
+    if (!generic && lead.program?.agent) return raw;
+    if (tab.named) return tab.name;
     if (!generic) return raw;
     if (lead.program?.name && lead.program.name !== "program") return lead.program.name;
   }
+  if (tab.named) return tab.name;
   return base(lead.cwd) || tab.name;
 }
 
@@ -84,6 +105,30 @@ function avatar(t, w, size = 20) {
     : tile.text_size(Math.round(size * 0.55)).font_bold().text_color(ink).child([...w.name][0]?.toUpperCase() ?? "?");
 }
 
+// Workspace numbers, like the sidebar (Ctrl+1–9 jump by them): the number in Geist Mono and the
+// workspace's colour, on a filled tile for the shown one.
+function numberBadge(t, w, size = 22) {
+  const n = spaces().findIndex((x) => x.id === w.id) + 1;
+  // The sidebar's lookup: a stored theme colour name read from the theme (Rosé Pine hues).
+  const stored = (shared("space.colors") ?? {})[w.id];
+  const color = w.name === "~" || !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
+  return h_flex().size(size).flex_none().rounded(Math.round(size * 0.3)).items_center().justify_center()
+    .font_family("Geist Mono").font_semibold().text_size(Math.round(size * 0.6))
+    .when(w.active, (el) => el.bg(color).text_color(t.background))
+    .when(!w.active, (el) => el.text_color(color))
+    .child(String(n || "·"));
+}
+
+// The same, as plain type (polybar/waybar style): zero-padded, the workspace's colour,
+// softened for workspaces other than the shown one.
+function workspaceNumber(t, w) {
+  const n = spaces().findIndex((x) => x.id === w.id) + 1;
+  const stored = (shared("space.colors") ?? {})[w.id];
+  const color = w.name === "~" || !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
+  return div().w(22).flex_none().flex().justify_center().font_family("Geist Mono").font_semibold().text_size(13)
+    .text_color(w.active ? color : tint(color, 0.55)).child(String(n || 0).padStart(2, "0"));
+}
+
 function icon(p, size, color) {
   if (!p?.icon) return null;
   return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
@@ -116,11 +161,27 @@ export default class GoTo extends View {
     this.machines = [];
     this.scroll = 0;
     this.handle = cx.focus_handle();
-    this.input = InputState.new({ placeholder: "Jump to a space, tab, agent or action…" });
-    this.input.on("change", (_e, cx) => { this.filter = this.input.value(); this.at = 0; this.follow = true; cx.notify(); });
+    this.mode = "normal";
+    this.pendingG = false;
+    this.input = InputState.new({ placeholder: "Press / to search spaces, tabs, agents and actions" });
+    this.input.on("change", (_e, cx) => {
+      const v = this.input.value();
+      // The / key can land in the field on top of the one put there: keep one.
+      if (v.startsWith("//")) { this.setField(v.slice(1)); return; }
+      if (v.startsWith("/")) { this.mode = "insert"; this.filter = v.slice(1); }
+      else {
+        // The "/" is gone (Backspace): back to normal, empty field, keys to the list.
+        this.mode = "normal"; this.filter = "";
+        if (v !== "") this.input.set_value("");
+        this.handle.focus();
+      }
+      this.at = 0; this.follow = true; cx.notify();
+    });
     this.input.on("submit", () => this.go(this.picked()));
-    this.input.focus();
-    cx.timer.after(600, () => this.input.focus());
+    // A click in the field starts a search too.
+    this.input.on("focus", () => { if (!this.input.value().startsWith("/")) this.setField("/"); });
+    this.handle.focus();
+    cx.timer.after(600, () => (this.mode === "insert" ? this.input.focus() : this.handle.focus()));
     cx.spawn(async (cx) => {
       try {
         const r = await hc(["machine", "ls", "--json"]);
@@ -132,6 +193,12 @@ export default class GoTo extends View {
 
   close() {
     closeOverlay(props().overlay);
+  }
+
+  // Set the field's text with the cursor at the end.
+  setField(text) {
+    this.input.set_value(text);
+    this.input.set_selected_range({ start: text.length, end: text.length });
   }
 
   picked() {
@@ -168,7 +235,9 @@ export default class GoTo extends View {
       const tabs = s.tabs.map((t) => tabRow(s, t, false)).filter((r) => hit(...r.text));
       const spaceHit = hit(s.name, s.branch ?? "", s.machine ?? "");
       if (!tabs.length && !spaceHit) continue;
-      spaceRows.push({ kind: "space", s, text: [s.name] }, ...(tabs.length ? tabs : s.tabs.map((t) => tabRow(s, t, false))));
+      const shownTabs = tabs.length ? tabs : s.tabs.map((t) => tabRow(s, t, false));
+      shownTabs.forEach((r, i) => { r.last = i === shownTabs.length - 1; });
+      spaceRows.push({ kind: "space", s, text: [s.name], hasTabs: shownTabs.length > 0 }, ...shownTabs);
     }
     if (spaceRows.length) out.push({ kind: "section", label: "Spaces" }, ...spaceRows);
 
@@ -211,14 +280,10 @@ export default class GoTo extends View {
     const st = r.tab.status;
     const dot = st === "blocked" ? t.blocked : st === "done" ? t.done : st === "working" ? t.working : st === "idle" ? t.dim : null;
     const pic = r.what === "terminal"
-      ? svg("mods/workspace-chrome/terminal.svg").size(13).text_color(t.dim)
-      : icon(r.program, 14, t.muted) ?? svg("mods/workspace-chrome/square.svg").size(12).text_color(t.dim);
-    return div().relative().size(24).flex_none().flex().items_center().justify_center().rounded(6)
-      .bg(tint(t.foreground, r.what === "agent" ? 0.07 : 0.035))
-      .child(pic)
-      .when(r.what === "agent" && Boolean(dot), (el) => el.child(st === "working"
-        ? div().absolute().right(-2).bottom(-2).child(svg("mods/workspace-chrome/spinner.svg").size(9).text_color(t.working).spin(900))
-        : div().absolute().right(-2).bottom(-2).size(8).rounded(4).bg(dot).border_1().border_color(t.chrome)));
+      ? svg("mods/workspace-chrome/terminal.svg").size(14).text_color(t.dim)
+      : icon(r.program, 15, t.muted) ?? svg("mods/workspace-chrome/square.svg").size(12).text_color(t.dim);
+    // Bare, like the sidebar's agent rows (status sits at the row's right edge).
+    return div().size(18).flex_none().flex().items_center().justify_center().child(pic);
   }
 
   // A keycap: a soft filled pill in the mono font.
@@ -237,18 +302,22 @@ export default class GoTo extends View {
       return h_flex().h(SIZE.section).px(14).pt(10).items_center().text_size(11).font_semibold()
         .text_color(r.label === "Needs you" ? t.blocked : t.dim).child(r.label);
     }
-    const base = (id, h) => h_flex().id(id).h(h).mx(8).px(10).gap(10).items_center().rounded(8).cursor_pointer()
-      .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(tint(t.foreground, 0.04))))
+    // The cursor row: a soft accent wash (like the active tab pill and the current workspace card).
+    const base = (id, h) => h_flex().id(id).relative().h(h).mx(8).px(10).gap(10).items_center().rounded(8).cursor_pointer()
+      .when(on, (el) => el.bg(tint(t.accent, 0.14))).when(!on, (el) => el.hover((s) => s.bg(tint(t.foreground, 0.04))))
       .on_click(() => this.go(r));
+    // Tree guides (like eza --tree): a faint line down from the space's badge to each tab.
+    const GUIDE = 21, guide = tint(t.foreground, 0.16);
     if (r.kind === "space") {
       const s = r.s;
       return base(`gt-space-${s.id}`, SIZE.space)
-        .child((spaceColors(), avatar(t, s, 22)))
-        .child(div().min_w(0).truncate().font_semibold().text_color(t.foreground).child(s.name))
+        .when(Boolean(r.hasTabs), (el) => el.child(div().absolute().left(GUIDE).top(29).w(1).h(SIZE.space - 29).bg(guide)))
+        .child((spaceColors(), workspaceNumber(t, s)))
+        // Workspace names are headings: semibold everywhere; the shown one is bright.
+        .child(div().min_w(0).truncate().text_size(13.5).font_semibold().text_color(s.active ? t.foreground : t.muted).child(s.name))
         .when(Boolean(s.branch), (el) => el.child(div().min_w(0).truncate().font_family("Geist Mono").text_size(11).text_color(t.dim).child(`⎇ ${s.branch}`)))
         .when(Boolean(s.machine), (el) => el.child(div().text_size(11).text_color(t.dim).child(`@${s.machine}`)))
         .child(div().flex_1())
-        .when(s.active, (el) => el.child(this.pill(t, "current", t.accent)))
         .child(div().flex_none().h(18).px(7).flex().items_center().rounded(9).bg(tint(t.foreground, 0.06))
           .font_family("Geist Mono").text_size(10.5).text_color(t.dim).child(`${s.tabs.length} tab${s.tabs.length === 1 ? "" : "s"}`));
     }
@@ -258,13 +327,13 @@ export default class GoTo extends View {
       const hint = s.active && tab.index <= 9 ? shortcut(`tab.select:${tab.index}`) : null;
       const who = mine.slice(0, 3);
       return base(`gt-tab-${tab.id}`, SIZE.tab)
-        .when(!r.withSpace, (el) => el.pl(20))
+        .when(!r.withSpace, (el) => el.pl(40)
+          .child(div().absolute().left(GUIDE).top(0).w(1).h(r.last ? SIZE.tab / 2 : SIZE.tab).bg(guide))
+          .child(div().absolute().left(GUIDE).top(SIZE.tab / 2).w(11).h(1).bg(guide)))
         // What it is, first: the agent's logo (status dot on its corner), a terminal icon, or the program's.
         .child(this.kindIcon(t, r))
-        .when(r.withSpace, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.dim).child(`${s.name} ›`)))
+        .when(r.withSpace, (el) => el.child(div().flex_none().max_w(140).truncate().font_semibold().text_color(t.dim).child(`${s.name} ›`)))
         .child(div().min_w(0).truncate().text_color(here ? t.foreground : t.muted).when(here, (d) => d.font_semibold()).child(r.label))
-        .when(tab.status === "blocked", (el) => el.child(this.pill(t, "needs you", t.blocked)))
-        .when(tab.status === "done", (el) => el.child(this.pill(t, "finished", t.done)))
         .child(div().flex_1())
         // A tag naming it: the agent ("claude code"), "terminal", or the program; +N when a tab has more agents.
         .child(div().flex_none().h(18).px(7).flex().items_center().rounded(9).font_family("Geist Mono").text_size(10.5)
@@ -274,7 +343,12 @@ export default class GoTo extends View {
           .child(r.what === "agent" ? (r.program?.name ?? "agent").toLowerCase() : r.what === "terminal" ? "terminal" : (r.program?.name ?? "program").toLowerCase()))
         .when(mine.length > 1, (el) => el.child(div().font_family("Geist Mono").text_size(10.5).text_color(t.dim).child(`+${mine.length - 1}`)))
         .when(tab.panes > 1, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${tab.panes} panes`)))
-        .when(Boolean(hint), (el) => el.child(this.cap(t, hint)));
+        .when(Boolean(hint), (el) => el.child(this.cap(t, hint)))
+        // Status at the right edge, the sidebar's marks: spinner, red !, foam dot; idle says nothing.
+        .child(div().w(12).flex_none().flex().items_center().justify_center()
+          .when(tab.status === "working", (el) => el.child(svg("mods/workspace-chrome/spinner.svg").size(11).text_color(t.working).spin(900)))
+          .when(tab.status === "blocked", (el) => el.child(div().font_bold().text_color(t.blocked).child("!")))
+          .when(tab.status === "done", (el) => el.child(div().size(6).rounded(3).bg(t.done))));
     }
     return base(`gt-act-${r.label}`, SIZE.action)
       .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(6).bg(tint(t.foreground, 0.05))
@@ -325,22 +399,51 @@ export default class GoTo extends View {
       })
       .on_key_down((e, cx) => {
         const k = e.key;
-        const ctrl = e.modifiers.control;
+        const m = e.modifiers;
+        const ctrl = m.control;
+        const plain = !ctrl && !m.alt && !m.platform;
+        const ch = plain ? (e.key_char ?? (k.length === 1 ? (m.shift ? k.toUpperCase() : k) : "")) : "";
+        const half = Math.max(1, Math.floor(listH / SIZE.tab / 2));
+        const pendingG = this.pendingG;
+        this.pendingG = false;
         if (k === "escape") return this.close();
-        if (k === "down" || (ctrl && k === "n")) move(1, cx);
-        else if (k === "up" || (ctrl && k === "p")) move(-1, cx);
-        else if (ctrl && k === "d") {
-          if (sel?.kind === "tab") { this.close(); run("tab.close", { id: sel.tab.id }); }
-        } else return;
+        if (this.mode === "insert") {
+          if (k === "down" || (ctrl && k === "n")) move(1, cx);
+          else if (k === "up" || (ctrl && k === "p")) move(-1, cx);
+          else return;
+          return cx.stop_propagation();
+        }
+        if (ch === "q") return this.close();
+        if (ch === "/") { this.mode = "insert"; this.setField("/"); this.input.focus(); cx.notify(); }
+        else if (k === "down" || ch === "j" || (ctrl && k === "n")) move(1, cx);
+        else if (k === "up" || ch === "k" || (ctrl && k === "p")) move(-1, cx);
+        else if (k === "enter" || ch === "l") this.go(sel);
+        else if (ch === "h") {
+          // Up to the space this tab belongs to; from a space, the space before it.
+          for (let i = (this.at ?? 0) - 1; i >= 0; i--) if (pickable[i].kind === "space") { this.at = i; this.follow = true; cx.notify(); break; }
+        }
+        else if (ch === "g") { if (pendingG) { this.at = 0; this.follow = true; cx.notify(); } else this.pendingG = true; }
+        else if (ch === "G") { this.at = Math.max(0, pickable.length - 1); this.follow = true; cx.notify(); }
+        else if (ctrl && k === "d") { this.at = Math.min(pickable.length - 1, (this.at ?? 0) + half); this.follow = true; cx.notify(); }
+        else if (ctrl && k === "u") { this.at = Math.max(0, (this.at ?? 0) - half); this.follow = true; cx.notify(); }
+        else if (ch === "x") { if (sel?.kind === "tab") { this.close(); run("tab.close", { id: sel.tab.id }); } }
+        else return;
         cx.stop_propagation();
       })
       .child(v_flex().w_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
         .bg(t.chrome).text_color(t.foreground).text_size(13).pt(8)
         // Search: a filled field, like the sidebar's cards.
         .child(h_flex().h(46).flex_none().mx(8).px(14).gap(10).items_center().rounded(10).bg(t.background)
+          // The mode, like vim's: neutral in normal, accent while typing.
+          // lualine-style mode block: solid, uppercase; pine for NORMAL, the accent for INSERT.
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family("Geist Mono").text_size(10.5).font_bold()
+            .bg(this.mode === "insert" ? t.accent : t.ansi4).text_color(t.background)
+            .child(this.mode.toUpperCase()))
           .child(svg("mods/workspace-chrome/search.svg").size(16).flex_none().text_color(t.dim))
           .child(Input.new(this.input).flex_1().h_full().text_size(15).text_color(t.foreground))
-          .child(this.cap(t, "esc")))
+          .child(h_flex().flex_none().gap(5).items_center().text_size(11).text_color(t.dim)
+            .when(this.mode === "normal", (el) => el.child(this.cap(t, "/")).child("search"))
+            .when(this.mode === "insert", (el) => el.child(this.cap(t, "esc")).child("close"))))
         // List
         .child(rows.length
           ? div().id("my-goto-list").relative().w_full().h(listH).my(4).overflow_hidden()
@@ -356,9 +459,16 @@ export default class GoTo extends View {
           : div().px(16).py(18).text_color(t.dim).child(`Nothing matches “${this.filter}”`))
         // Footer: keys on the left, counts on the right; no divider line.
         .child(h_flex().h(38).flex_none().px(16).gap(14).items_center().text_size(11).text_color(t.dim)
-          .child(h_flex().gap(5).items_center().child(this.cap(t, "↑↓")).child("move"))
-          .child(h_flex().gap(5).items_center().child(this.cap(t, "↵")).child("open"))
-          .child(h_flex().gap(5).items_center().child(this.cap(t, "⌃D")).child("close tab"))
+          .when(this.mode === "normal", (el) => el
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "j k")).child("move"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "l")).child("open"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "h")).child("space"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "x")).child("close tab"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "q")).child("quit")))
+          .when(this.mode === "insert", (el) => el
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "↑↓")).child("move"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "↵")).child("open"))
+            .child(h_flex().gap(5).items_center().child(this.cap(t, "⌫")).child("delete / for normal mode")))
           .child(div().flex_1())
           .child(div().font_family("Geist Mono").child(`${pickable.filter((r) => r.kind === "tab" && !r.withSpace).length} tabs · ${spaces().length} spaces`))));
   }

@@ -8,6 +8,28 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder } from "herdr";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
+
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
+
+// Personal: cards and pills follow the Cards transparency slider (my-settings).
+const glass = (c) => {
+  const r = shared("rice") ?? {};
+  const p = r["transparency.on"] === false ? 100 : (r["transparency.cards"] ?? 100);
+  return p >= 100 || !/^#[0-9a-f]{6}$/i.test(c) ? c : c + Math.round((p / 100) * 255).toString(16).padStart(2, "0");
+};
 
 // Personal: every + here asks for the new space's name first (my-prompt), instead of
 // making one called after its folder.
@@ -62,6 +84,31 @@ function avatar(t, w, size = 20) {
   return home
     ? tile.child(svg("mods/sleek-workspaces/home.svg").size(Math.round(size * 0.6)).text_color(ink))
     : tile.text_size(Math.round(size * 0.55)).font_bold().text_color(ink).child([...w.name][0]?.toUpperCase() ?? "?");
+}
+
+// Personal: Hyprland-style workspace numbers (Ctrl+1–9 jump by them). The number in Geist Mono
+// and the workspace's own colour: bare for the others, on a filled tile for the shown one.
+function numberBadge(t, w, i, size = 20) {
+  const color = w.name === "~" ? t.ansi6 : (() => {
+    const stored = (shared("space.colors") ?? {})[w.id];
+    return !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
+  })();
+  return h_flex().size(size).flex_none().rounded(Math.round(size * 0.3)).items_center().justify_center()
+    .font_family("Geist Mono").font_semibold().text_size(Math.round(size * 0.62))
+    .when(w.active, (el) => el.bg(color).text_color(t.background))
+    .when(!w.active, (el) => el.text_color(color))
+    .child(String(i + 1));
+}
+
+// Personal: the workspace number as plain type (polybar/waybar style): zero-padded Geist Mono
+// in the workspace's colour, full strength for the shown one, softened for the others.
+function workspaceNumber(t, w, i) {
+  const color = w.name === "~" ? t.ansi6 : (() => {
+    const stored = (shared("space.colors") ?? {})[w.id];
+    return !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
+  })();
+  return div().w(20).flex_none().font_family("Geist Mono").font_semibold().text_size(13)
+    .text_color(w.active ? color : tint(color, 0.55)).child(String(i + 1).padStart(2, "0"));
 }
 
 // A space speaks up only when something in it needs you.
@@ -476,16 +523,16 @@ export default class Spaces extends View {
     const kids = ctx.all.filter((k) => k.parent === a.address && k.state === "live");
     return [
       // Sleek: the shown agent gets a filled highlight (like the open half of a toggle).
-      h_flex().id(`ag-${a.address}`).h(40).flex_none().px(8).gap(9).items_center().rounded(7).cursor_pointer()
-        .when(a.focused, (h) => h.bg(t.selected))
+      h_flex().id(`ag-${a.address}`).h(36).flex_none().px(8).gap(9).items_center().rounded(7).cursor_pointer()
+        .when(a.focused, (h) => h.bg(glass(t.selected)))
         .when(!a.focused, (h) => h.hover((x) => x.bg(tint(t.foreground, 0.04))))
         .on_click(() => run("pane.focus", { pane: a.pane }))
         .child(div().w(16).flex_none().flex().items_center().justify_center().when(Boolean(pic), (el) => el.child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(v_flex().flex_1().min_w(0).gap(2)
           .child(name
-            ? div().w_full().truncate().text_size(12.5).text_color(quiet ? t.muted : t.foreground).when(a.focused, (d) => d.font_semibold()).child(name)
-            : div().w_full().truncate().text_size(12.5).italic().text_color(t.dim).child("untitled"))
-          .child(h_flex().w_full().min_w(0).gap(5).font_family(ctx.mono).text_size(10.5).text_color(t.dim)
+            ? div().w_full().truncate().h(16).text_size(12.5).text_color(quiet ? t.muted : t.foreground).when(a.focused, (d) => d.font_semibold()).child(name)
+            : div().w_full().truncate().h(16).text_size(12.5).italic().text_color(t.dim).child("untitled"))
+          .child(h_flex().w_full().min_w(0).h(13).gap(5).items_center().font_family(ctx.mono).text_size(10.5).text_color(t.dim)
             .child(div().flex_none().child(prog))
             .when(tabIndex != null, (el) => el.child(div().flex_none().child(`· tab ${tabIndex}`)))
             .when(Boolean(when), (el) => el.child(div().flex_none().child(`· ${duration(ctx.now - when)}`)))
@@ -557,13 +604,18 @@ export default class Spaces extends View {
       })
       .on_mouse_down("right", () => this.menu(w))
       .when(Boolean(tree), (el) => el.child(div().text_color(t.dim).child("↳")))
-      .child(avatar(t, w, 18))
-      .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().child(w.name))
+      .child(workspaceNumber(t, w, i))
+      // Workspace names are headings: semibold everywhere (agent titles stay regular); the shown one is bright.
+      .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13.5)
+        .font_semibold().text_color(on ? t.foreground : t.muted).child(w.name))
       .when(Boolean(branch), (el) => el.child(div().flex_shrink_1().min_w(0).max_w(90).truncate().font_family(ctx.mono).text_size(10.5).text_color(t.dim).child(`⎇ ${branch}`)))
       .when((g?.ahead ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(10.5).text_color(t.ansi2).child(`↑${g.ahead}`)))
       .when((g?.behind ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(10.5).text_color(t.ansi1).child(`↓${g.behind}`)))
       .child(div().flex_1())
+      // Folded: every status with its count. Open: only what's urgent (the rows show the rest).
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))))
+      .when(open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11)
+        .children(this.counts(t, mine.filter((a) => a.status === "blocked" || a.status === "working")))))
       .child(div().id(`fold-${w.id}`).flex_none().p(2).rounded(4).cursor_pointer()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => {
@@ -575,7 +627,7 @@ export default class Spaces extends View {
         .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12)));
 
     const body = mine.length
-      ? v_flex().pt(1).gap(1).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
+      ? v_flex().pt(1).gap(6).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
       : h_flex().id(`empty-${w.id}`).h(26).px(10).items_center().rounded(6).cursor_pointer()
           .font_family(SANS).text_size(11.5).text_color(t.dim)
           .hover((el) => el.bg(tint(t.foreground, 0.04)).text_color(t.muted))
@@ -586,7 +638,7 @@ export default class Spaces extends View {
     // the shown workspace stands out by its filled badge and brighter name.
     return v_flex().relative().w_full().flex_none().mt(6).p(4).rounded(10)
       // The shown workspace's card carries a faint wash of the accent ("you are here").
-      .bg(on ? mixHex(t.background, t.accent, 0.07) : t.background)
+      .bg(glass(on ? mixHex(t.background, t.accent, 0.07) : t.background))
       .when(Boolean(tree), (el) => el.ml(14))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
@@ -607,9 +659,9 @@ export default class Spaces extends View {
       .on_click(() => run("space.select", { id: w.id }))
       .on_mouse_down("right", () => this.menu(w))
       .child(div().relative().size(36).flex().items_center().justify_center().rounded(9)
-        .when(w.active, (el) => el.bg(mixHex(t.background, t.accent, 0.07)))
+        .when(w.active, (el) => el.bg(glass(mixHex(t.background, t.accent, 0.07))))
         .when(!w.active, (el) => el.hover((h) => h.bg(tint(t.foreground, 0.05))))
-        .child(avatar(t, w, 22))
+        .child(numberBadge(t, w, i, 24))
         .when(Boolean(dot), (el) => el.child(div().absolute().right(3).bottom(3).size(8).rounded(4).bg(dot)
           .border_1().border_color(t.chrome))));
   }

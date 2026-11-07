@@ -5,7 +5,7 @@
     "kind": "popup",
     "at": "top",
     "offset": 64,
-    "width": 520,
+    "width": 600,
     "height": 760,
     "frame": "none"
   }

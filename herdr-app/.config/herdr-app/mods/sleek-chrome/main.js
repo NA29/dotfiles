@@ -1,11 +1,34 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, window, shared, setShared, updates, layout, spaces, settings } from "herdr";
+import { div as sqDiv } from "gpui-kit";
+import { shared as sqShared } from "herdr";
+
+// Personal: the Square corners setting (rice "look.square") squares every corner drawn with
+// .rounded*(n) (circles from .rounded_full stay round). Patched once on the shared element prototype.
+{
+  const p = Object.getPrototypeOf(sqDiv());
+  for (const m of ["rounded", "rounded_t", "rounded_b", "rounded_l", "rounded_r", "rounded_tl", "rounded_tr", "rounded_bl", "rounded_br"]) {
+    const key = `__square_${m}`;
+    if (!p[key] && typeof p[m] === "function") {
+      p[key] = p[m];
+      p[m] = function (n) { return p[key].call(this, (sqShared("rice") ?? {})["look.square"] ? 0 : n); };
+    }
+  }
+}
 
 // Personal (my-chrome):
 // the footer is one line of small outlined buttons. (The workspace dots
 // moved to the status bar: next to the window buttons they looked like a fourth button.)
 const MONO = () => "Geist Mono";
+const SANS = "Geist";
+
+// Personal: cards and pills follow the Cards transparency slider (my-settings).
+const glass = (c) => {
+  const r = shared("rice") ?? {};
+  const p = r["transparency.on"] === false ? 100 : (r["transparency.cards"] ?? 100);
+  return p >= 100 || !/^#[0-9a-f]{6}$/i.test(c) ? c : c + Math.round((p / 100) * 255).toString(16).padStart(2, "0");
+};
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -38,15 +61,18 @@ export default class WorkspaceChrome extends View {
     const t = theme();
     const collapsed = narrow();
     if (props()?.footer) {
-      const chip = (id, icon, label, tip, action) => h_flex().id(id).h(22).px(collapsed ? 4 : 7).gap(6).items_center().rounded(6)
-        .border_1().border_color(t.border).text_color(t.muted).cursor_pointer().tooltip(tip)
-        .hover(s => s.border_color(t.muted).text_color(t.foreground))
-        .on_click(action).child(svg(`mods/sleek-chrome/${icon}.svg`).size(12))
-        .when(!collapsed, el => el.child(label));
-      return h_flex().size_full().border_t(1).border_color(t.border).px(12).gap(6).items_center()
+      // Sleek: filled pills in the card colour, like the tab pills and status-bar pills;
+      // half the width each, lined up with the cards above. Icons only on the rail.
+      const chip = (id, icon, label, tip, action) => h_flex().id(id).h(28).px(collapsed ? 7 : 10).gap(7).items_center().justify_center()
+        .when(!collapsed, el => el.flex_1().min_w(0))
+        .rounded(8).bg(glass(t.background)).text_color(t.muted).cursor_pointer().tooltip(tip)
+        .hover(s => s.bg(glass(t.selected)).text_color(t.foreground))
+        .on_click(action).child(svg(`mods/sleek-chrome/${icon}.svg`).size(13).flex_none())
+        .when(!collapsed, el => el.child(div().truncate().font_family(SANS).child(label)));
+      return h_flex().size_full().px(8).gap(6).items_center()
         .text_size(12)
         .when(collapsed, el => el.px(6).gap(4).justify_center())
-        .child(chip("settings", "settings", "Settings", "Settings", () => run("app.settings"))
+        .child(chip("settings", "settings", "Settings", "Settings (Cmd+,)", () => run("mod.open", { name: "my-settings" }))
           // An update is ready: a small dot, like before.
           .when(Boolean(updates().app.ready), el => el.child(div().size(5).rounded_full().bg(t.done))))
         .child(chip("machine", "plus", "Add machine", "Add a machine", () => run("mod.open", { name: "machine-add" })));
