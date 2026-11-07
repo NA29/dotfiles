@@ -83,9 +83,9 @@
           },
           "min": 44,
           "max": 480,
-          "background": "#010409b3",
+          "background": "#010409bf",
           "resizable": false,
-          "radius": 10,
+          "radius": 12,
           "border": {
             "width": 1,
             "color": "border"
@@ -105,8 +105,8 @@
                 "px": 40
               },
               "window_drag": true,
-              "background": "#010409b3",
-              "radius": 10,
+              "background": "#010409bf",
+              "radius": 12,
               "border": {
                 "width": 1,
                 "color": "border"
@@ -127,7 +127,7 @@
                         "width": 1,
                         "color": "accent"
                       },
-                      "radius": 10,
+                      "radius": 12,
                       "gap": 5,
                       "lone": true,
                       "border": {
@@ -169,8 +169,8 @@
                   "min": 280,
                   "max": 900,
                   "hidden": true,
-                  "background": "#010409b3",
-                  "radius": 10,
+                  "background": "#010409bf",
+                  "radius": 12,
                   "border": {
                     "width": 1,
                     "color": "border"
@@ -192,8 +192,8 @@
               "size": {
                 "px": 32
               },
-              "background": "#010409b3",
-              "radius": 10,
+              "background": "#010409bf",
+              "radius": 12,
               "border": {
                 "width": 1,
                 "color": "border"
