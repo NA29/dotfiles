@@ -83,7 +83,7 @@
           },
           "min": 44,
           "max": 480,
-          "background": "#16141fbd",
+          "background": "#010409b3",
           "resizable": false,
           "radius": 10,
           "border": {
@@ -105,7 +105,7 @@
                 "px": 40
               },
               "window_drag": true,
-              "background": "#16141fbd",
+              "background": "#010409b3",
               "radius": 10,
               "border": {
                 "width": 1,
@@ -122,7 +122,7 @@
                   "content": {
                     "tab": "active",
                     "pane": {
-                      "background": "#191724db",
+                      "background": "#0d1117d9",
                       "focus": {
                         "width": 1,
                         "color": "accent"
@@ -133,14 +133,6 @@
                       "border": {
                         "width": 1,
                         "color": "border"
-                      },
-                      "header": {
-                        "content": {
-                          "mod": "sleek-pane"
-                        },
-                        "reveal": "always",
-                        "height": 30,
-                        "position": "top"
                       }
                     }
                   }
@@ -177,7 +169,7 @@
                   "min": 280,
                   "max": 900,
                   "hidden": true,
-                  "background": "#16141fbd",
+                  "background": "#010409b3",
                   "radius": 10,
                   "border": {
                     "width": 1,
@@ -200,7 +192,7 @@
               "size": {
                 "px": 32
               },
-              "background": "#16141fbd",
+              "background": "#010409b3",
               "radius": 10,
               "border": {
                 "width": 1,
@@ -222,7 +214,7 @@
           "gap": 0
         }
       ],
-      "background": "#00000066"
+      "background": "#000000b3"
     }
   ],
   "background": {
@@ -242,8 +234,7 @@
   "gap": 0,
   "colors": {
     "dim": "#8a86a3",
-    "muted": "#aaa6c3",
-    "accent": "#f6c177"
+    "muted": "#aaa6c3"
   },
   "theme": {
     "light": "paper",
