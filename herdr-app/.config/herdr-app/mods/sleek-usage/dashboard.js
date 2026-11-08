@@ -147,7 +147,11 @@ export function dashboard(v,cx){
  const header=h_flex().min_h(46).px(12).py(6).gap(8).items_center().flex_wrap().bg(t.background).rounded(8)
   .child(heading('Usage',t)).child(label('/',t))
   .child(div().font_family(SANS).text_size(12).text_color(t.muted).tooltip('Local histories across all workspaces on this Mac').child('This Mac'))
-  .child(label('/',t)).child(chip('usage-provider-filter',(v.providerFilter==='all'?'All providers':nameOf(v.providerFilter))+' ⌄',v.providerMenu,(_e,c)=>{v.providerMenu=!v.providerMenu;c.notify();},t))
+  .child(label('/',t)).child(chip('usage-provider-filter',
+   h_flex().gap(6).items_center()
+    .child(div().child(v.providerFilter==='all'?'All providers':nameOf(v.providerFilter)))
+    .child(svg('mods/workspace-chrome/chevron-down.svg').size(12).flex_none()),
+   v.providerMenu,(_e,c)=>{v.providerMenu=!v.providerMenu;c.notify();},t))
   .child(div().flex_1())
   .when(v.tab!=='limits',el=>el.child(h_flex().gap(2).children([[1,'Past 24h'],[7,'7 days'],[30,'30 days'],[90,'90 days']].map(([n,text])=>chip(`usage-period-${n}`,text,v.period===n,(_e,c)=>{v.period=n;v.handle.focus();c.notify();v.loadHistory(c);},t)))))
   .child(h_flex().gap(2).ml(4).children(['cost','tokens','limits'].map(key=>chip(`usage-view-${key}`,key[0].toUpperCase()+key.slice(1),v.tab===key,chooseTab(key),t))))
