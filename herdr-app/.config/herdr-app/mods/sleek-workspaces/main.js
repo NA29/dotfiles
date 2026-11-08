@@ -746,6 +746,29 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
+  // Personal: in the Agents and Attention views, a strip of workspace pills under the header, so
+  // you can pick where new agents go (the + menu creates them in the shown workspace) without
+  // switching back to Spaces. Same language as the tabs: only the shown one is a pill (accent
+  // wash), others bare with a pill on hover; numbers as plain type in the workspace's colour.
+  strip(t) {
+    return h_flex().id("ws-strip").flex_none().flex_wrap().gap(4).px(8).pb(10)
+      .children(this.ordered().map(({ w, i }) => {
+        const flag = w.status === "blocked"
+          ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
+          : w.status === "done" ? div().size(6).flex_none().rounded(3).bg(t.done) : null;
+        return h_flex().id(`ws-chip-${w.id}`).h(26).max_w(150).flex_none().pl(6).pr(9).gap(5).items_center().rounded(7)
+          .cursor_pointer().font_family(SANS).text_size(12)
+          .when(w.active, el => el.bg(tint(t.accent, 0.14)))
+          .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.05))))
+          .tooltip(w.active ? `${w.name} · new agents start here` : `Switch to ${w.name}`)
+          .on_click((_e, cx) => { cx.stop_propagation(); run("space.select", { id: w.id }); })
+          .on_mouse_down("right", () => this.menu(w))
+          .child(workspaceNumber(t, w, i))
+          .child(div().min_w(0).truncate().font_semibold().text_color(w.active ? t.foreground : t.muted).child(w.name))
+          .when(Boolean(flag), el => el.child(flag));
+      }));
+  }
+
   individuals(t, mode) {
     const ctx = this.ctx;
     const rows = ctx.visibleAgents;
@@ -837,6 +860,7 @@ export default class Spaces extends View {
             })
             .child(svg("mods/workspace-chrome/sidebar.svg").size(15))))
         .child(plus))
+      .when(!collapsed && !this.listFolded && mode !== "workspaces", el => el.child(this.strip(t)))
       .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));

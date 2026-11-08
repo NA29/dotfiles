@@ -11,3 +11,5 @@ Clicks focus the agent's pane; child-agent rows still open their peek. Native ne
 `agent-views.js` controls display order only. It never changes actual workspace/tab order. Only Spaces uses the pre-existing worktree ordering logic.
 
 Validation: native checks for sleek-workspaces, my-settings, my-keys and a synthetic populated Attention view; live flat-view screenshot; ordering/interaction tests covering stable status changes, pins, unknown/empty states, settings preservation and navigation. Run the latter with `node --experimental-default-type=module tests/agent-views.test.mjs`.
+
+In **Agents** and **Attention**, a strip of workspace pills sits under the header (numbered like the cards, the shown one in the accent wash; `!` / dot when a workspace needs you or is done). Click one to make it the shown workspace, so the + menu starts new agents there; right-click opens its space menu.
