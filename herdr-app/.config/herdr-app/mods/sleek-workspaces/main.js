@@ -687,7 +687,7 @@ export default class Spaces extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => {
         cx.stop_propagation();
-        openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 280, height: 184,
+        openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 340, height: 252, frame: "none",
           props: { viewMenu: true } });
       })
       .child(svg("mods/sleek-workspaces/view.svg").size(14));
@@ -697,21 +697,42 @@ export default class Spaces extends View {
     const t = theme();
     const mode = viewMode((shared("rice") ?? {})["sidebar.agentView"]);
     const close = () => closeOverlay(props().overlay);
-    return v_flex().id("agent-view-popup").w_full().track_focus(this.menuHandle).font_family(SANS).text_size(12)
-      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); close(); } })
-      .child(div().px(12).py(8).text_size(11).font_semibold().text_color(t.dim).child("Agent view"))
-      .children(VIEW_MODES.map(([id, title, hint]) => h_flex().id(`agent-view-${id}`).h(42).px(12).gap(10).items_center()
-        .cursor_pointer().bg(mode === id ? tint(t.accent, 0.14) : t.chrome)
-        .hover(el => el.bg(t.hover))
-        .on_click((_e, cx) => {
-          cx.stop_propagation();
-          setShared("rice", { ...(shared("rice") ?? {}), "sidebar.agentView": id });
-          close();
-        })
-        .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(div().text_color(t.foreground).child(title))
-          .child(div().text_size(10).text_color(t.dim).truncate().child(hint)))
-        .child(div().w(14).flex_none().text_color(t.accent).child(mode === id ? "✓" : ""))));
+    const choose = id => {
+      setShared("rice", { ...(shared("rice") ?? {}), "sidebar.agentView": id });
+      close();
+    };
+    const hints = ["Workspace cards with nested agents", "Flat list with workspace labels", "Needs you, ready, running, idle"];
+    const keycap = text => div().size(22).flex_none().flex().items_center().justify_center().rounded(5)
+      .bg(t.background).font_family(MONO()).text_size(10.5).text_color(t.muted).child(text);
+    return v_flex().id("agent-view-popup").size_full().track_focus(this.menuHandle).font_family(SANS).text_size(12)
+      .on_key_down((e, cx) => {
+        if (e.key === "escape") { cx.stop_propagation(); close(); return; }
+        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
+        const key = e.key_char ?? e.key;
+        if (plain && ["1", "2", "3"].includes(key)) { cx.stop_propagation(); choose(VIEW_MODES[Number(key) - 1][0]); }
+      })
+      .child(v_flex().size_full().p(8).gap(6).rounded(14).border_1().border_color(t.border).shadow_lg()
+        .overflow_hidden().bg(t.chrome).text_color(t.foreground)
+        .child(h_flex().h(38).flex_none().px(10).gap(9).items_center().rounded(9).bg(t.background)
+          .child(div().h(22).px(7).flex_none().flex().items_center().rounded(5).bg(t.ansi4)
+            .font_family(MONO()).text_size(10.5).font_bold().text_color(t.background).child("VIEW"))
+          .child(div().font_semibold().text_size(13).child("Agent view")))
+        .child(v_flex().flex_1().gap(4).children(VIEW_MODES.map(([id, title], i) =>
+          h_flex().id(`agent-view-${id}`).h(44).flex_none().px(9).gap(10).items_center().rounded(8)
+            .cursor_pointer().bg(mode === id ? tint(t.accent, 0.14) : t.chrome)
+            .hover(el => el.bg(t.hover))
+            .on_click((_e, cx) => { cx.stop_propagation(); choose(id); })
+            .child(keycap(String(i + 1)))
+            .child(v_flex().flex_1().min_w(0).gap(3)
+              .child(div().text_size(12.5).child(title))
+              .child(div().text_size(10.5).text_color(t.dim).truncate().child(hints[i])))
+            .child(div().w(14).flex_none().text_color(t.accent).child(mode === id ? "✓" : "")))))
+        .child(h_flex().h(24).flex_none().px(9).gap(7).items_center().text_color(t.dim).text_size(10.5)
+          .child(div().font_family(MONO()).child("1 / 2 / 3"))
+          .child(div().child("choose view"))
+          .child(div().flex_1())
+          .child(div().font_family(MONO()).child("esc"))
+          .child(div().child("close"))));
   }
 
   individuals(t, mode) {
@@ -732,12 +753,6 @@ export default class Spaces extends View {
     if (!rows.length) children.push(v_flex().px(10).py(14).gap(6)
       .child(div().font_family(SANS).text_size(12).text_color(t.muted).child("No agents running"))
       .child(div().font_family(SANS).text_size(11).text_color(t.dim).child("Your workspaces and shell tabs are still available.")));
-    children.push(h_flex().id("agent-browse-workspaces").mt(14).h(30).px(8).gap(6).items_center().rounded(6).cursor_pointer()
-      .text_color(t.dim).hover(el => el.bg(t.hover).text_color(t.foreground))
-      .tooltip("Open Go to for all workspaces, including ones without agents")
-      .on_click(() => run("mod.open", { name: "my-goto" }))
-      .child(svg("mods/workspace-chrome/search.svg").size(12).flex_none())
-      .child(div().font_family(SANS).text_size(11).child(`Browse ${ctx.spaceOf.size} workspace${ctx.spaceOf.size === 1 ? "" : "s"} ↗`)));
     return children;
   }
 

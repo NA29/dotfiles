@@ -53,7 +53,7 @@ assert.equal(state.rice['sidebar.agentView'],'attention');assert.equal(state.ric
 render();assert.deepEqual(calls.find(c=>c[0]==='order')[1],['b','d','a','c','e']);
 assert(elements.find(e=>e.identifier==='attention-blocked'));
 elements.find(e=>e.identifier==='ag-b').click({},cx);assert(calls.some(c=>c[0]==='run'&&c[1]==='pane.focus'&&c[2].pane==='p2'));
-elements.find(e=>e.identifier==='agent-browse-workspaces').click({},cx);assert(calls.some(c=>c[0]==='run'&&c[1]==='mod.open'&&c[2].name==='my-goto'));
+assert(!elements.some(e=>e.identifier==='agent-browse-workspaces'),'no browse-workspaces footer');
 state.rice['sidebar.agentView']='workspaces';render();assert(elements.find(e=>e.identifier==='space-one'));
-scope.agents=()=>[];state.rice['sidebar.agentView']='agents';render();assert(elements.find(e=>e.identifier==='agent-browse-workspaces'));
-console.log('PASS: stable flat order, pinned agents, attention groups, unknown/empty states, preserved settings, workspace view, navigation order and agent/workspace actions.');
+scope.agents=()=>[];state.rice['sidebar.agentView']='agents';render();assert(!elements.find(e=>e.identifier==='agent-browse-workspaces'));
+console.log('PASS: stable flat order, pinned agents, attention groups, unknown/empty states, preserved settings, workspace view, navigation order, agent actions and removed footer.');
