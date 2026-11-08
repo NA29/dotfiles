@@ -219,6 +219,16 @@
               "size": {
                 "px": 0
               }
+            },
+            {
+              "id": "my-ping",
+              "type": "block",
+              "content": {
+                "mod": "my-ping"
+              },
+              "size": {
+                "px": 0
+              }
             }
           ],
           "resizable": false,
