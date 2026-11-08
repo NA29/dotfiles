@@ -752,25 +752,29 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Personal: in the Agents and Attention views, a strip of workspace pills under the header, so
-  // you can pick where new agents go (the + menu creates them in the shown workspace) without
-  // switching back to Spaces. Same language as the tabs: only the shown one is a pill (accent
-  // wash), others bare with a pill on hover; numbers as plain type in the workspace's colour.
+  // Personal: in the Agents and Attention views, the workspaces sit in the header, under its title
+  // and above its hairline, so you can pick where new agents go (the + menu creates them in the
+  // shown workspace) without switching back to Spaces. Plain type, polybar-style: the shown one at
+  // full strength and bold, the others regular weight and dimmed; no fill, no accent.
   strip(t) {
-    return h_flex().id("ws-strip").flex_none().flex_wrap().gap(4).px(8).pb(10)
+    return h_flex().id("ws-strip").flex_none().mx(8).pb(6).mb(8).flex_wrap().gap(2)
+      .border_b_1().border_color(tint(t.foreground, 0.08))
       .children(this.ordered().map(({ w, i }) => {
         const flag = w.status === "blocked"
           ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
           : w.status === "done" ? div().size(6).flex_none().rounded(3).bg(t.done) : null;
-        return h_flex().id(`ws-chip-${w.id}`).h(26).max_w(150).flex_none().pl(6).pr(9).gap(5).items_center().rounded(7)
-          .cursor_pointer().font_family(SANS).text_size(12)
-          .when(w.active, el => el.bg(tint(t.accent, 0.14)))
-          .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.05))))
+        return h_flex().id(`ws-chip-${w.id}`).h(26).max_w(160).flex_none().px(6).gap(7).items_center().rounded(6)
+          .cursor_pointer().font_family(SANS).text_size(12.5)
+          .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.04))))
           .tooltip(w.active ? `${w.name} · new agents start here` : `Switch to ${w.name}`)
           .on_click((_e, cx) => { cx.stop_propagation(); run("space.select", { id: w.id }); })
           .on_mouse_down("right", () => this.menu(w))
-          .child(workspaceNumber(t, w, i))
-          .child(div().min_w(0).truncate().font_semibold().text_color(w.active ? t.foreground : t.muted).child(w.name))
+          // Contrast through type alone: the shown one bold and full strength, the others regular
+          // weight and pushed well back (number at 40% of its colour, name in the dim tone).
+          .child(div().flex_none().font_family(MONO()).text_size(13).font_bold()
+            .text_color(w.active ? spaceTone(t, w) : tint(spaceTone(t, w), 0.4)).child(String(i + 1).padStart(2, "0")))
+          .child(div().min_w(0).truncate().when(w.active, d => d.font_bold().text_color(t.foreground))
+            .when(!w.active, d => d.font_weight(400).text_color(t.dim)).child(w.name))
           .when(Boolean(flag), el => el.child(flag));
       }));
   }
@@ -843,7 +847,8 @@ export default class Spaces extends View {
       // Click the header to fold the whole list away (remembered).
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
         // Personal: a hairline under the section header so it reads apart from the cards.
-        .when(!collapsed && !this.listFolded, el => el.mx(8).pl(6).pr(0).border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
+        .when(!collapsed && !this.listFolded, el => el.mx(8).pl(6).pr(0))
+        .when(!collapsed && !this.listFolded && mode === "workspaces", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
             this.listFolded = !this.listFolded;
