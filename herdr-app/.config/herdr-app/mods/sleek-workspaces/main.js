@@ -543,12 +543,9 @@ export default class Spaces extends View {
             ? div().w_full().truncate().h(16).text_size(12.5).text_color(quiet ? t.muted : t.foreground).child(name)
             : div().w_full().truncate().h(16).text_size(12.5).italic().text_color(t.dim).child("untitled"))
           .child(h_flex().w_full().min_w(0).h(13).gap(5).items_center().font_family(SANS).text_size(11).text_color(t.dim)
-            // The workspace as a small dot in its colour plus its name in the meta tone (not a
-            // coloured word on every row).
-            .when(Boolean(workspace), el => el.child(div().size(6).flex_none().rounded(3).bg(spaceTone(t, workspace)))
-              .child(div().id(`ag-ws-${a.address}`).flex_shrink_1().min_w(0).truncate()
-                .tooltip(`${workspace.name}${workspace.machine ? ` @${workspace.machine}` : ""} · ${prog}`)
-                .child(workspace.name)).child(div().flex_none().child("·")))
+            .when(Boolean(workspace), el => el.child(div().flex_shrink_1().min_w(0).truncate()
+              .text_color(spaceTone(t, workspace)).tooltip(`${workspace.name}${workspace.machine ? ` @${workspace.machine}` : ""} · ${prog}`)
+              .child(workspace.name)).child(div().flex_none().child("·")))
             .when(tabIndex != null, (el) => el.child(div().flex_none().child(`Tab ${tabIndex}`)))
             .when(Boolean(when), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).text_size(10.5).child(duration(ctx.now - when))))
             .when(Boolean(machine), (el) => el.child(div().flex_none().font_family(ctx.mono).text_color(t.muted).child(`@${machine}`)))))
@@ -755,59 +752,48 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Personal (views polish): the same quiet card surface the Spaces view uses, so all three
-  // views read as one family: neutral fill, hairline edge, no accent outline.
-  card(id) {
-    return v_flex().id(id).relative().w_full().flex_none().rounded(10)
-      .bg(glass(mixHex(this.theme.background, this.theme.foreground, 0.025)))
-      .border_1().border_color(tint(this.theme.foreground, 0.05));
-  }
-
-  // Personal: in the Agents and Attention views, a workspace switcher under the header, so you can
-  // pick where new agents go (the + menu creates them in the shown workspace) without switching
-  // back to Spaces. A segmented control on the card surface: the shown workspace is the raised
-  // segment (neutral, like the shown card in Spaces); numbers as plain type in the workspace's colour.
+  // Personal: in the Agents and Attention views, a strip of workspace pills under the header, so
+  // you can pick where new agents go (the + menu creates them in the shown workspace) without
+  // switching back to Spaces. Same language as the tabs: only the shown one is a pill (accent
+  // wash), others bare with a pill on hover; numbers as plain type in the workspace's colour.
   strip(t) {
-    this.theme = t;
-    return div().flex_none().px(8).pb(12).child(
-      this.card("ws-strip").p(3).child(h_flex().w_full().flex_wrap().gap(2)
-        .children(this.ordered().map(({ w, i }) => {
-          const flag = w.status === "blocked"
-            ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
-            : w.status === "done" ? div().size(6).flex_none().rounded(3).bg(t.done) : null;
-          return h_flex().id(`ws-chip-${w.id}`).h(28).max_w(160).flex_none().pl(7).pr(10).gap(6).items_center().rounded(7)
-            .cursor_pointer().font_family(SANS).text_size(12.5)
-            .when(w.active, el => el.bg(tint(t.foreground, 0.07)))
-            .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.04))))
-            .tooltip(w.active ? `${w.name} · new agents start here` : `Switch to ${w.name}`)
-            .on_click((_e, cx) => { cx.stop_propagation(); run("space.select", { id: w.id }); })
-            .on_mouse_down("right", () => this.menu(w))
-            .child(workspaceNumber(t, w, i))
-            .child(div().min_w(0).truncate().font_semibold().text_color(w.active ? t.foreground : t.muted).child(w.name))
-            .when(Boolean(flag), el => el.child(flag));
-        }))));
+    return h_flex().id("ws-strip").flex_none().flex_wrap().gap(4).px(8).pb(10)
+      .children(this.ordered().map(({ w, i }) => {
+        const flag = w.status === "blocked"
+          ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
+          : w.status === "done" ? div().size(6).flex_none().rounded(3).bg(t.done) : null;
+        return h_flex().id(`ws-chip-${w.id}`).h(26).max_w(150).flex_none().pl(6).pr(9).gap(5).items_center().rounded(7)
+          .cursor_pointer().font_family(SANS).text_size(12)
+          .when(w.active, el => el.bg(tint(t.accent, 0.14)))
+          .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.05))))
+          .tooltip(w.active ? `${w.name} · new agents start here` : `Switch to ${w.name}`)
+          .on_click((_e, cx) => { cx.stop_propagation(); run("space.select", { id: w.id }); })
+          .on_mouse_down("right", () => this.menu(w))
+          .child(workspaceNumber(t, w, i))
+          .child(div().min_w(0).truncate().font_semibold().text_color(w.active ? t.foreground : t.muted).child(w.name))
+          .when(Boolean(flag), el => el.child(flag));
+      }));
   }
 
   individuals(t, mode) {
-    this.theme = t;
     const ctx = this.ctx;
     const rows = ctx.visibleAgents;
     const draw = a => this.agentRow(t, a, ctx, t.accent, true,
       ctx.spaceOf.get(a.space) ?? { id: a.space, name: a.space || "Workspace", machine: null });
-    const rowsBox = list => v_flex().gap(2).children(list.flatMap(draw));
-    if (!rows.length) return [this.card("agents-empty").px(14).py(14).gap(4)
-      .child(div().font_family(SANS).text_size(12.5).text_color(t.muted).child("No agents running"))
-      .child(div().font_family(SANS).text_size(11).text_color(t.dim).child("Your workspaces and shell tabs are still available."))];
-    // Agents: one card holding the whole list.
-    if (mode !== "attention") return [this.card("agents-all").p(6).child(rowsBox(rows))];
-    // Attention: one card per group, its title set as the card's heading like a workspace name.
-    return attentionGroups(rows).map((group, n) => this.card(`attention-${group.status}`).mt(n ? 12 : 0).px(6).pb(6).pt(2)
-      .child(h_flex().h(32).px(8).gap(10).items_center().font_family(SANS)
-        .child(h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, group.status)))
-        .child(div().flex_1().min_w(0).truncate().text_size(13).font_semibold()
-          .text_color(group.status === "idle" ? t.muted : t.foreground).child(group.title))
-        .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))))
-      .child(rowsBox(group.agents)));
+    const children = [];
+    if (mode === "attention") {
+      for (const group of attentionGroups(rows)) {
+        children.push(h_flex().id(`attention-${group.status}`).h(28).mt(children.length ? 12 : 0).px(8).gap(7).items_center().flex_none()
+          .when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status)))
+          .child(div().flex_1().font_family(SANS).text_size(11).font_semibold().text_color(t.muted).child(group.title))
+          .child(div().font_family(MONO()).text_size(10.5).text_color(t.dim).child(String(group.agents.length))));
+        children.push(...group.agents.flatMap(draw));
+      }
+    } else children.push(...rows.flatMap(draw));
+    if (!rows.length) children.push(v_flex().px(10).py(14).gap(6)
+      .child(div().font_family(SANS).text_size(12).text_color(t.muted).child("No agents running"))
+      .child(div().font_family(SANS).text_size(11).text_color(t.dim).child("Your workspaces and shell tabs are still available.")));
+    return children;
   }
 
 
