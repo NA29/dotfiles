@@ -48,6 +48,7 @@ const DEFAULTS = {
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
   "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
   "panes.header": true,
+  "ping.thumbsUp": true,
   "sidebar.activity": true, "sidebar.usage": true, "sidebar.agentView": "workspaces",
   "tabs.numbers": true,
   "terminal.font": null, "terminal.fontSize": null, "terminal.padding": 14,

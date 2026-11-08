@@ -52,6 +52,7 @@ const DEFAULTS = {
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
   "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
   "panes.header": true,
+  "ping.thumbsUp": true,
   "sidebar.activity": true, "sidebar.usage": true, "sidebar.agentView": "workspaces",
   "tabs.numbers": true,
   "terminal.font": null, "terminal.fontSize": null, "terminal.padding": 14,
@@ -527,7 +528,7 @@ export default class MySettings extends View {
     ];
   }
 
-  sounds(t, s) {
+  sounds(t, s, c) {
     const snd = s.sounds ?? {};
     const list = (which) => {
       const cur = snd[which] ?? null;
@@ -555,6 +556,8 @@ export default class MySettings extends View {
       this.group("Alerts", [
         this.row("Play sounds", "When an agent finishes while you're elsewhere, or needs you.",
           this.toggle("snd-on", snd.enabled !== false, (v, cx) => this.saveSettings(cx, (o) => { o.sounds = { ...(o.sounds ?? {}), enabled: v }; }))),
+        this.row("Thumbs-up", "Pop the thumbs-up beside Claude Code's note when it finishes or needs you.",
+          this.toggle("ping-thumbs", c["ping.thumbsUp"], (v) => set({ "ping.thumbsUp": v }))),
         this.pad(h_flex().w_full().gap(12).items_start()
           .child(v_flex().flex_1().min_w(0).child(head("Agent finished")).child(list("done")))
           .child(div().w(1).h(320).bg(t.border))
@@ -638,7 +641,7 @@ export default class MySettings extends View {
     const c = cfg(), s = settings();
     const [id, title, , about] = SECTIONS.find((x) => x[0] === this.section) ?? SECTIONS[0];
     const body = { look: () => this.look(t, c, s), wallpaper: () => this.wallpaper(t, c), sidebar: () => this.sidebar(t, c),
-      bars: () => this.bars(t, c), terminal: () => this.terminal(t, c, s), sounds: () => this.sounds(t, s),
+      bars: () => this.bars(t, c), terminal: () => this.terminal(t, c, s), sounds: () => this.sounds(t, s, c),
       keys: () => this.keys(t, c), general: () => this.general(t, s) }[id]();
 
     const nav = v_flex().w(210).h_full().flex_none().p(10).gap(2)

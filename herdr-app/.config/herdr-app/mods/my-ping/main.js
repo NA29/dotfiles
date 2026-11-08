@@ -10,10 +10,10 @@
 //   - props.show: the thumbs-up itself, a small frameless window that closes on its own.
 
 import { View, div, image } from "gpui-kit";
-import { agents, openOverlay, closeOverlay, props, window } from "herdr";
+import { agents, openOverlay, closeOverlay, props, window, shared } from "herdr";
 
 const IMG = "mods/my-ping/thumbs-up.png";
-const SIZE = 110;         // the thumbs-up, px
+const SIZE = 88;          // the thumbs-up, px
 const SHOW_MS = 6000;     // about as long as Herdr's note stays
 // Herdr's note, measured from a screenshot: 18px in from the right and bottom edges, ~374px wide.
 const TOAST = { right: 18, bottom: 18, width: 374, height: 78 };
@@ -44,7 +44,8 @@ export default class Ping extends View {
       if (a.status === "done" || (a.status === "blocked" && !(a.focused && window().active))) ping = true;
     }
     this.seen = now;
-    if (ping) openOverlay({ mod: "my-ping", kind: "window", frame: "none", width: 1, height: 1, at: { x: 0, y: 0 }, props: { measure: true } });
+    // Settings > Sounds > Thumbs-up (rice "ping.thumbsUp"; on unless switched off).
+    if (ping && (shared("rice") ?? {})["ping.thumbsUp"] !== false) openOverlay({ mod: "my-ping", kind: "window", frame: "none", width: 1, height: 1, at: { x: 0, y: 0 }, props: { measure: true } });
   }
 
   render() {
