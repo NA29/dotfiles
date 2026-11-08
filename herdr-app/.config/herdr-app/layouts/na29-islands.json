@@ -40,7 +40,9 @@
                   "size": {
                     "weight": 1
                   },
-                  "min": 90
+                  "min": 90,
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 },
                 {
                   "id": "activity",
@@ -50,7 +52,9 @@
                   },
                   "size": {
                     "px": 60
-                  }
+                  },
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 },
                 {
                   "id": "usage",
@@ -60,9 +64,16 @@
                   },
                   "size": {
                     "px": 164
-                  }
+                  },
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 }
-              ]
+              ],
+              "padding": [
+                0,
+                5
+              ],
+              "gap": 5
             },
             {
               "id": "sidebar-footer",
@@ -214,13 +225,10 @@
           "gap": 0
         }
       ],
-      "background": "#000000b3"
+      "background": "#000000b0"
     }
   ],
-  "background": {
-    "image": "backgrounds/98473741_p0-ee62c4.jpg",
-    "fit": "cover"
-  },
+  "background": "#08070c",
   "terminal_padding": [
     14,
     12
