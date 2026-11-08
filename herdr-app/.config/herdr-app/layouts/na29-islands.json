@@ -169,6 +169,13 @@
                           "content": {
                             "mod": "sleek-changes"
                           }
+                        },
+                        {
+                          "id": "context",
+                          "type": "block",
+                          "content": {
+                            "mod": "my-context"
+                          }
                         }
                       ],
                       "active": "files"
