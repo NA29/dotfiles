@@ -1,6 +1,6 @@
 # Sidebar agent views
 
-The segmented switch below the sidebar heading selects **Spaces**, **Agents**, or **Attention**. The same setting is in Settings → Sidebar → Agent view. Selection is stored in `rice.json` as `sidebar.agentView`, through the existing my-keys settings writer. Default: `workspaces` (Spaces).
+The small view-options icon in the existing sidebar heading opens a popup for **Spaces**, **Agents**, or **Attention**, without adding a selector row. The same setting is in Settings → Sidebar → Agent view. Selection is stored in `rice.json` as `sidebar.agentView`, through the existing my-keys settings writer. Default: `workspaces` (Spaces).
 
 - **Spaces** preserves the existing workspace cards, folding, worktree/machine grouping, context menus and workspace dragging.
 - **Agents** is a flat list with a workspace subtitle on each agent. It follows stable model order (workspace/tab/pane), with pinned agents first. Status changes do not reorder this view.

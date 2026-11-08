@@ -36,7 +36,7 @@ const scope={VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el
  spaces:()=>sp,machines:()=>[],panes:()=>fixture.map(a=>({pane:a.pane,tab:a.tab,cwd:'/repo'})),agents:()=>fixture,terminals:()=>[],
  theme:()=>new Proxy({},{get:()=> '#334455'}),layout:()=>({id:'sidebar',size:{px:268}}),window:()=>({active:true}),
  setAgentOrder:a=>calls.push(['order',Array.from(a)]),run:(...a)=>calls.push(['run',...a]),
- localStorage:{getItem:()=>null,setItem(){}},settings:()=>({}),watchFolder:async()=>{},openOverlay(){}};
+ props:()=>({overlay:"view-menu"}),closeOverlay:()=>calls.push(["close"]),localStorage:{getItem:()=>null,setItem(){}},settings:()=>({}),watchFolder:async()=>{},openOverlay(){}};
 vm.createContext(scope);
 const source=fs.readFileSync(new URL('../main.js',import.meta.url),'utf8').replace(/^import .*?;\s*$/gm,'').replace(/export function /g,'function ').replace('export default class','globalThis.TestView=class');
 new vm.Script(source).runInContext(scope);
@@ -44,7 +44,11 @@ const view=new scope.TestView();Object.assign(view,{changed:{},git:{},listFolded
 const cx={notify(){},stop_propagation(){}};
 const render=()=>{elements=[];calls=[];view.render();};
 render();assert.deepEqual(calls.find(c=>c[0]==='order')[1],['c','a','b','d','e']);
+assert(!elements.some(e=>e.identifier==='agent-view-switch'),'no separate selector row');
+assert(elements.some(e=>e.identifier==='agent-view-menu'),'selector belongs in existing header');
+view.menuHandle={focus(){}};view.renderViewMenu();
 const switchButton=elements.find(e=>e.identifier==='agent-view-attention');switchButton.click({},cx);
+assert(calls.some(c=>c[0]==='close'),'choosing a view closes the popup');
 assert.equal(state.rice['sidebar.agentView'],'attention');assert.equal(state.rice['usage.codex'],false,'switching must retain other settings');
 render();assert.deepEqual(calls.find(c=>c[0]==='order')[1],['b','d','a','c','e']);
 assert(elements.find(e=>e.identifier==='attention-blocked'));

@@ -7,7 +7,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
@@ -167,6 +167,11 @@ export function tone(t, status) {
 
 export default class Spaces extends View {
   init(_props, cx) {
+    if (props()?.viewMenu) {
+      this.menuHandle = cx.focus_handle();
+      this.menuHandle.focus();
+      return;
+    }
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -674,18 +679,39 @@ export default class Spaces extends View {
   }
 
 
-  viewSwitch(t, mode) {
-    return h_flex().id("agent-view-switch").mx(8).mb(8).p(3).gap(3).rounded(8).bg(glass(t.background)).flex_none()
-      .children(VIEW_MODES.map(([id, title, hint]) => div().id(`agent-view-${id}`).flex_1().min_w(0).h(26)
-        .flex().items_center().justify_center().rounded(6).font_family(SANS).text_size(10.5)
-        .text_color(mode === id ? t.foreground : t.dim)
-        .when(mode === id, el => el.bg(tint(t.accent, 0.14)))
-        .cursor_pointer().tooltip(hint).hover(el => el.text_color(t.foreground))
+  viewMenuButton(t, mode) {
+    const title = VIEW_MODES.find(([id]) => id === mode)?.[1] ?? "Spaces";
+    return div().id("agent-view-menu").size(20).flex_none().flex().items_center().justify_center().rounded(5)
+      .cursor_pointer().text_color(t.dim).hover(el => el.bg(t.hover).text_color(t.foreground))
+      .tooltip(`View: ${title} · change agent view`)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 280, height: 184,
+          props: { viewMenu: true } });
+      })
+      .child(svg("mods/sleek-workspaces/view.svg").size(14));
+  }
+
+  renderViewMenu() {
+    const t = theme();
+    const mode = viewMode((shared("rice") ?? {})["sidebar.agentView"]);
+    const close = () => closeOverlay(props().overlay);
+    return v_flex().id("agent-view-popup").w_full().track_focus(this.menuHandle).font_family(SANS).text_size(12)
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); close(); } })
+      .child(div().px(12).py(8).text_size(11).font_semibold().text_color(t.dim).child("Agent view"))
+      .children(VIEW_MODES.map(([id, title, hint]) => h_flex().id(`agent-view-${id}`).h(42).px(12).gap(10).items_center()
+        .cursor_pointer().bg(mode === id ? tint(t.accent, 0.14) : t.chrome)
+        .hover(el => el.bg(t.hover))
         .on_click((_e, cx) => {
           cx.stop_propagation();
           setShared("rice", { ...(shared("rice") ?? {}), "sidebar.agentView": id });
-          cx.notify();
-        }).child(title)));
+          close();
+        })
+        .child(v_flex().flex_1().min_w(0).gap(3)
+          .child(div().text_color(t.foreground).child(title))
+          .child(div().text_size(10).text_color(t.dim).truncate().child(hint)))
+        .child(div().w(14).flex_none().text_color(t.accent).child(mode === id ? "✓" : ""))));
   }
 
   individuals(t, mode) {
@@ -717,6 +743,7 @@ export default class Spaces extends View {
 
 
   render() {
+    if (props()?.viewMenu) return this.renderViewMenu();
     const t = theme();
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
@@ -770,7 +797,7 @@ export default class Spaces extends View {
           })
           .child(div().font_family(SANS).text_size(12).text_color(t.muted).font_semibold().child(mode === "workspaces" ? "Workspaces" : "Agents"))
           .child(div().h(16).px(6).flex().items_center().rounded(8).bg(tint(t.foreground, 0.06)).text_color(t.dim).child(`${mode === "workspaces" ? sp.length : list.length}`))
-          .child(svg(`mods/workspace-chrome/chevron-${this.listFolded ? "right" : "down"}.svg`).size(12).text_color(t.dim))
+          .child(this.viewMenuButton(t, mode))
           .child(div().flex_1())
           .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`${needs} need you`)))
           .when(busy > 0, el => el.child(div().text_color(t.working).child(`${busy} busy`))))
@@ -784,7 +811,6 @@ export default class Spaces extends View {
             })
             .child(svg("mods/workspace-chrome/sidebar.svg").size(15))))
         .child(plus))
-      .when(!collapsed && !this.listFolded, el => el.child(this.viewSwitch(t, mode)))
       .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));
