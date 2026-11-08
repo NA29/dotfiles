@@ -16,7 +16,9 @@ then commit.
   card; also the Activity log dialog), `sleek-usage` (5h/7d limits), `sleek-tabs`, `sleek-status`
   (bottom bar: CPU/memory/battery, now playing, Wispr Flow, clock), `sleek-pane` (pane header),
   `sleek-chrome` (brand row + footer buttons), `sleek-files` / `sleek-changes` (the Files and
-  Changes panel island, cloned from Herdr's `files`/`changes`), `my-keys` (key actions + settings writer).
+  Changes panel island, cloned from Herdr's `files`/`changes`), `my-keys` (key actions + settings writer), `my-ping` (zero-height
+  block: pops `thumbs-up.png` left of Herdr's toast when a Claude Code agent is done/needs you; Herdr's
+  `toast` mod is shipped, so this sits beside it rather than restyling it).
 - Overlays: `my-goto` (Go to, Cmd+P), `tmux-prefix` (Ctrl+A menu), `my-settings` (Settings,
   Cmd+, / Ctrl+A s), the Activity log (Ctrl+A a), `my-prompt` (name a new space).
 - Never edit Herdr's shipped mods/layouts; clone them (`mod.clone`, `layout.clone`).
