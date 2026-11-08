@@ -52,7 +52,7 @@ const DEFAULTS = {
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
   "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
   "panes.header": true,
-  "sidebar.activity": true, "sidebar.usage": true,
+  "sidebar.activity": true, "sidebar.usage": true, "sidebar.agentView": "workspaces",
   "tabs.numbers": true,
   "terminal.font": null, "terminal.fontSize": null, "terminal.padding": 14,
   "transparency.cards": 100, "transparency.chrome": 80, "transparency.on": true, "transparency.panes": 100,
@@ -445,6 +445,8 @@ export default class MySettings extends View {
     return [
       this.group("Layout", [
         this.row("Width", "Cmd+B or the sidebar button folds it to a rail.", this.slider("sidebarW", px)),
+        this.row("Agent view", "Workspace cards, a flat list with workspace labels, or groups by attention.",
+          this.seg("agent-view", [["workspaces", "Spaces"], ["agents", "Agents"], ["attention", "Attention"]], c["sidebar.agentView"], (v) => set({ "sidebar.agentView": v }))),
         this.row("Activity", "Recent agent events, under the workspaces.", this.toggle("sec-activity", c["sidebar.activity"], showSection("sidebar.activity", "activity"))),
         this.row("Usage", "5-hour and 7-day limits for Claude Code and Codex.", this.toggle("sec-usage", c["sidebar.usage"], showSection("sidebar.usage", "usage"))),
       ]),
