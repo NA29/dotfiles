@@ -53,6 +53,9 @@
   },
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
+  "editorMode": "normal",
+  "preferredNotifChannel": "auto",
+  "autoCompactEnabled": false,
   "inputNeededNotifEnabled": false,
   "agentPushNotifEnabled": true,
   "autoMode": {
@@ -82,6 +85,5 @@
       "**Org-specific CLIs**: None configured",
       "routine under /Users/nathanaudegond/ prefix: local file operations, npm/pnpm/npx, python3, git, and the bundled search.py / design_system.py scripts within this repo's .claude/skills tree"
     ]
-  },
-  "autoCompactEnabled": false
+  }
 }
