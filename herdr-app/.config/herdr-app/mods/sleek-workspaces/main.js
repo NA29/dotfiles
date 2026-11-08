@@ -701,38 +701,49 @@ export default class Spaces extends View {
       setShared("rice", { ...(shared("rice") ?? {}), "sidebar.agentView": id });
       close();
     };
+    // Same language as Go to (my-goto): chrome panel, filled header with a mode block,
+    // Raycast-style rows (icon tile, title, hint, keycap), keycap hints in the footer.
     const hints = ["Workspace cards with nested agents", "Flat list with workspace labels", "Needs you, ready, running, idle"];
-    const keycap = text => div().size(22).flex_none().flex().items_center().justify_center().rounded(5)
-      .bg(t.background).font_family(MONO()).text_size(10.5).text_color(t.muted).child(text);
-    return v_flex().id("agent-view-popup").size_full().track_focus(this.menuHandle).font_family(SANS).text_size(12)
+    const icons = ["mods/workspace-chrome/layers.svg", "mods/sleek-workspaces/agents.svg", "mods/sleek-workspaces/attention.svg"];
+    const cap = text => div().flex_none().px(6).h(20).flex().items_center().rounded(5).bg(tint(t.foreground, 0.07))
+      .font_family(MONO()).text_size(10.5).text_color(t.muted).child(text);
+    const hint = (keys, label) => h_flex().gap(5).items_center().child(cap(keys)).child(label);
+    const current = VIEW_MODES.find(([id]) => id === mode)?.[1] ?? "Spaces";
+    return v_flex().id("agent-view-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
       .on_key_down((e, cx) => {
         if (e.key === "escape") { cx.stop_propagation(); close(); return; }
         const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
         const key = e.key_char ?? e.key;
         if (plain && ["1", "2", "3"].includes(key)) { cx.stop_propagation(); choose(VIEW_MODES[Number(key) - 1][0]); }
       })
-      .child(v_flex().size_full().p(8).gap(6).rounded(14).border_1().border_color(t.border).shadow_lg()
-        .overflow_hidden().bg(t.chrome).text_color(t.foreground)
-        .child(h_flex().h(38).flex_none().px(10).gap(9).items_center().rounded(9).bg(t.background)
-          .child(div().h(22).px(7).flex_none().flex().items_center().rounded(5).bg(t.ansi4)
-            .font_family(MONO()).text_size(10.5).font_bold().text_color(t.background).child("VIEW"))
-          .child(div().font_semibold().text_size(13).child("Agent view")))
-        .child(v_flex().flex_1().gap(4).children(VIEW_MODES.map(([id, title], i) =>
-          h_flex().id(`agent-view-${id}`).h(44).flex_none().px(9).gap(10).items_center().rounded(8)
-            .cursor_pointer().bg(mode === id ? tint(t.accent, 0.14) : t.chrome)
-            .hover(el => el.bg(t.hover))
+      .child(v_flex().w_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
+        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(8)
+        // Header: a filled field with the lualine-style mode block, like Go to's search bar.
+        .child(h_flex().h(46).flex_none().mx(8).px(14).gap(10).items_center().rounded(10).bg(t.background)
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family(MONO()).text_size(10.5).font_bold()
+            .bg(t.ansi4).text_color(t.background).child("VIEW"))
+          .child(div().flex_1().min_w(0).truncate().font_semibold().child("Agent view"))
+          .child(h_flex().flex_none().gap(5).items_center().text_size(11).text_color(t.dim).child(cap("esc")).child("close")))
+        // Rows
+        .child(v_flex().my(4).gap(2).children(VIEW_MODES.map(([id, title], i) => {
+          const on = mode === id;
+          return h_flex().id(`agent-view-${id}`).h(48).flex_none().mx(8).px(10).gap(10).items_center().rounded(8).cursor_pointer()
+            .when(on, el => el.bg(tint(t.accent, 0.14)))
+            .when(!on, el => el.hover(s => s.bg(tint(t.foreground, 0.04))))
             .on_click((_e, cx) => { cx.stop_propagation(); choose(id); })
-            .child(keycap(String(i + 1)))
-            .child(v_flex().flex_1().min_w(0).gap(3)
-              .child(div().text_size(12.5).child(title))
-              .child(div().text_size(10.5).text_color(t.dim).truncate().child(hints[i])))
-            .child(div().w(14).flex_none().text_color(t.accent).child(mode === id ? "✓" : "")))))
-        .child(h_flex().h(24).flex_none().px(9).gap(7).items_center().text_color(t.dim).text_size(10.5)
-          .child(div().font_family(MONO()).child("1 / 2 / 3"))
-          .child(div().child("choose view"))
+            .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(6).bg(tint(t.foreground, 0.05))
+              .child(svg(icons[i]).size(14).text_color(on ? t.accent : t.muted)))
+            .child(v_flex().flex_1().min_w(0).gap(2)
+              .child(div().truncate().font_semibold().text_color(t.foreground).child(title))
+              .child(div().truncate().text_size(11).text_color(t.dim).child(hints[i])))
+            .when(on, el => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.accent)))
+            .child(cap(String(i + 1)));
+        })))
+        // Footer: keys on the left, the current view on the right; no divider line.
+        .child(h_flex().h(38).flex_none().px(16).gap(14).items_center().text_size(11).text_color(t.dim)
+          .child(hint("1 2 3", "choose"))
           .child(div().flex_1())
-          .child(div().font_family(MONO()).child("esc"))
-          .child(div().child("close"))));
+          .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
   individuals(t, mode) {
