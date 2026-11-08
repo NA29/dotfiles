@@ -141,7 +141,8 @@ export default class Tabs extends View {
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = shared("workspace.panels") ?? ["files", "changes"];
+    // Personal: Context (my-context) is always offered, after Files and Changes.
+    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "context"];
     this.syncPanel(space, panel, body, enabled);
     // Personal: Files / Changes are one segmented toggle, deliberately unlike the outlined tab
     // boxes: a filled pill holding both, the open one raised inside it with an accent icon.
@@ -157,7 +158,13 @@ export default class Tabs extends View {
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
         }).child(svg(icon).size(13).text_color(on ? t.accent : t.dim)).child(label);
     };
-    const panels = ["files", "changes"].filter((p) => enabled.includes(p));
+    const panels = ["files", "changes", "context"].filter((p) => enabled.includes(p));
+    const PANEL = { files: ["Files", "mods/files/file.svg"], changes: ["Changes", "mods/changes/changes.svg"], context: ["Context", "mods/my-context/context.svg"] };
+    // A thin divider between neighbours, hidden next to the open one (its highlight separates them).
+    const openPanel = panel?.hidden ? null : body?.active;
+    const toggleItems = panels.flatMap((p, i) => [
+      ...(i > 0 && openPanel !== p && openPanel !== panels[i - 1] ? [div().w(1).h(12).flex_none().bg(t.border)] : []),
+      panelButton(p, PANEL[p][0], PANEL[p][1])]);
     // Sleek: no own background or border; the layout block is a floating rounded card.
     return h_flex().size_full().min_w(0).px(6).pl(lightsPadding).gap(4).items_center()
       .on_mouse_up("left", () => { this.pressed = null; })
@@ -168,10 +175,7 @@ export default class Tabs extends View {
         // A thin divider sets the toggle apart from the tabs.
         .child(div().w(1).h(16).mx(6).flex_none().bg(t.border))
         .child(h_flex().id("panel-toggle").flex_none().h(28).p(3).gap(2).items_center().rounded(8).bg(glass(t.background))
-          .when(panels.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
-          // A thin divider between the halves, hidden when either is open (its highlight separates them).
-          .when(panels.length === 2 && (panel?.hidden || !panels.includes(body?.active)), el => el.child(div().w(1).h(12).flex_none().bg(t.border)))
-          .when(panels.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))))
+          .children(toggleItems)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/sleek-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/sleek-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/sleek-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
