@@ -60,6 +60,8 @@ const BINDINGS = [
   ["s", "Settings", "mod.open", { name: "my-settings" }],
   ["t", "Toggle transparency", "fn", toggleTransparency],
   ["a", "Activity log", "fn", openActivity],
+  ["u", "Usage", "mod.open", { name: "sleek-usage" }],
+  ["U", "Usage", "mod.open", { name: "sleek-usage" }],
   ["b", "Toggle sidebar", "layout.toggle", { id: "sidebar" }],
   ["g", "Go to…", "mod.open", { name: "my-goto" }],
   ...Array.from({ length: 10 }, (_, i) => [String(i), `Tab ${i === 0 ? 10 : i}`, "tab.select", { index: i === 0 ? 10 : i }]),
@@ -163,7 +165,7 @@ export default class TmuxPrefix extends View {
       ["Panes", [["%", "Split right"], ['"', "Split down"], ["h j k l", "Focus pane"], ["z", "Zoom pane"], ["x", "Close pane"]],
         [["← ↓ ↑ →", "Focus pane"]]],
       ["Spaces", [["J", "Next space", true], ["K", "Previous space", true]], []],
-      ["App", [["g", "Go to…"], ["a", "Activity log"], ["s", "Settings"], ["t", "Toggle transparency"], ["b", "Toggle sidebar"], ["d", "Minimize window"]], []],
+      ["App", [["g", "Go to…"], ["a", "Activity log"], ["u", "Usage"], ["s", "Settings"], ["t", "Toggle transparency"], ["b", "Toggle sidebar"], ["d", "Minimize window"]], []],
     ];
     const cap = (text, accent = false) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(5)
       .bg(accent ? tint(t.accent, 0.16) : tint(t.foreground, 0.07)).font_family(MONO).text_size(10.5)

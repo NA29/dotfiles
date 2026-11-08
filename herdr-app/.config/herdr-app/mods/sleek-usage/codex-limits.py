@@ -1,34 +1,63 @@
-# Prints Codex's latest rate-limit snapshot as JSON: {"at": <epoch s>, "rate_limits": {...}}.
-# Codex writes one into its session log after each turn; read the newest logs from the end.
-import glob, json, os, sys
+"""Read the latest actual Codex rate-limit event; never expose session text."""
+import datetime
+import glob
+import json
+import os
+
 
 def find(node):
     if isinstance(node, dict):
-        if "rate_limits" in node and isinstance(node["rate_limits"], dict):
-            return node["rate_limits"]
-        for v in node.values():
-            r = find(v)
-            if r: return r
+        limits = node.get('rate_limits')
+        if isinstance(limits, dict) and (limits.get('primary') or limits.get('secondary')):
+            return limits
+        for value in node.values():
+            result = find(value)
+            if result:
+                return result
     elif isinstance(node, list):
-        for v in node:
-            r = find(v)
-            if r: return r
+        for value in node:
+            result = find(value)
+            if result:
+                return result
     return None
 
-files = sorted(glob.glob(os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")), key=os.path.getmtime, reverse=True)[:5]
-for f in files:
-    with open(f, "rb") as h:
-        h.seek(0, 2)
-        size = h.tell()
-        h.seek(max(0, size - 800_000))
-        lines = h.read().decode("utf-8", "replace").splitlines()
-    for line in reversed(lines):
-        if '"rate_limits"' not in line:
-            continue
+
+def latest_snapshot(paths):
+    newest = None
+    for path in paths:
         try:
-            rl = find(json.loads(line))
-        except Exception:
+            modified = os.path.getmtime(path)
+            with open(path, 'rb') as stream:
+                stream.seek(0, 2)
+                stream.seek(max(0, stream.tell() - 800_000))
+                lines = stream.read().decode('utf-8', 'replace').splitlines()
+            for line in reversed(lines):
+                if '"rate_limits"' not in line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                limits = find(event)
+                if not limits:
+                    continue
+                try:
+                    timestamp = datetime.datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00')).timestamp()
+                    source = 'event'
+                except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+                    timestamp, source = modified, 'file'
+                snapshot = {'at': int(timestamp), 'at_source': source, 'rate_limits': limits}
+                if newest is None or snapshot['at'] > newest['at']:
+                    newest = snapshot
+                break
+        except OSError:
             continue
-        if rl and (rl.get("primary") or rl.get("secondary")):
-            print(json.dumps({"at": int(os.path.getmtime(f)), "rate_limits": rl}))
-            sys.exit(0)
+    return newest
+
+
+if __name__ == '__main__':
+    paths = sorted(glob.glob(os.path.expanduser('~/.codex/sessions/*/*/*/rollout-*.jsonl')),
+                   key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)[:5]
+    snapshot = latest_snapshot(paths)
+    if snapshot:
+        print(json.dumps(snapshot))

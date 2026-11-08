@@ -4,15 +4,16 @@
 //                from the rate limits Claude Code hands its status line.
 //   Codex        its newest session log (./codex-limits.py reads the last snapshot).
 // Shown: any agent with a reading from the last 7 days; running ones are lit with a
-// dot, the others dimmed. A window whose reset time has passed shows 0%.
+// dot, the others dimmed. Click a provider for details; prefix U opens the dialog.
+// Expired snapshots stay unknown until the provider reports a new reading.
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, exec, home, readTextFile, run, settings, theme, layout, shared } from "herdr";
+import { agents, exec, home, readTextFile, run, theme, layout, shared, setShared, props, appHome, openOverlay, closeOverlay } from "herdr";
 
 // Personal settings (my-settings panel): which providers, and when they show.
 const R = (k, d) => (shared("rice") ?? {})[k] ?? d;
-import { box, bar as thinBar, pctColor, glass } from "./box.js";
+import { box, bar as thinBar, pctColor, glass, tint } from "./box.js";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
 
@@ -32,49 +33,13 @@ import { shared as sqShared } from "herdr";
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
 const SANS = "Geist";
-const CELLS = 18;
-const WEEK = 7 * 24 * 3600;
+import { WEEK, readings, untilText } from "./model.js";
+import { dashboard } from "./dashboard.js";
 
 const PROVIDERS = [
   { id: "claude", name: "claude code", app: "claude-code", icon: "icons/claude.svg" },
   { id: "codex", name: "codex", app: "codex", icon: "icons/codex.svg" },
 ];
-
-function untilText(seconds) {
-  if (seconds <= 0) return "now";
-  const m = Math.round(seconds / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h${String(m % 60).padStart(2, "0")}`;
-  const d = Math.floor(h / 24);
-  return `${d}d${h % 24 ? `${h % 24}h` : ""}`;
-}
-
-// One window: { used: 0..100, resets: epoch s | null }, or null when unknown.
-function windowOf(raw, now) {
-  if (!raw) return null;
-  const used = Number(raw.used_percentage ?? raw.used_percent ?? raw.utilization);
-  if (!Number.isFinite(used)) return null;
-  let resets = Number(raw.resets_at ?? raw.reset_at ?? raw.resetsAt);
-  if (!Number.isFinite(resets)) resets = null;
-  else if (resets > 1e12) resets = Math.round(resets / 1000); // ms
-  // Past its reset: the window has started over.
-  if (resets && resets <= now) return { used: 0, resets: null, fresh: true };
-  return { used: Math.max(0, Math.min(100, used)), resets };
-}
-
-function readings(claude, codex, now) {
-  const out = {};
-  if (claude?.rate_limits) {
-    const rl = claude.rate_limits;
-    out.claude = { at: claude.at, five: windowOf(rl.five_hour, now), week: windowOf(rl.seven_day, now) };
-  }
-  if (codex?.rate_limits) {
-    const rl = codex.rate_limits;
-    out.codex = { at: codex.at, five: windowOf(rl.primary, now), week: windowOf(rl.secondary, now), plan: rl.plan_type };
-  }
-  return out;
-}
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -87,24 +52,63 @@ function find(node, id) {
 
 export default class Usage extends View {
   init(_props, cx) {
-    this.raw = {};
+    this.detail = Boolean(props()?.detail || props()?.overlay);
+    this.raw = shared("usage.latest") ?? {};
+    this.errors = {};
+    this.refreshing = false;
+    this.tab = props()?.tab ?? localStorage.getItem("usage.tab") ?? "cost";
+    this.providerFilter = props()?.provider ?? "all";
+    this.providerMenu = false;
+    this.period = 30;
+    this.breakdown = "model";
+    this.historyLoading = false;
+    this.analytics = null;
+    this.historyGeneration = 0;
+    if (this.detail) { this.handle = cx.focus_handle(); this.handle.focus(); }
     this.folded = localStorage.getItem("folded") === "1";
     this.refresh(cx);
+    if (this.detail && this.tab !== "limits") this.loadHistory(cx);
     cx.timer.every(30000, (cx) => this.refresh(cx));
+    if (this.detail) cx.timer.every(60000, (cx) => { if (this.tab !== "limits") this.loadHistory(cx); });
   }
 
   refresh(cx) {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    cx.notify();
     cx.spawn(async (cx) => {
-      const raw = {};
-      try { raw.claude = JSON.parse(await readTextFile(`${home()}/.cache/agent-usage/claude.json`)); } catch {}
       try {
-        const r = await exec("python3", ["-I", `${home()}/.config/herdr-app/mods/sleek-usage/codex-limits.py`]);
-        if (r.code === 0 && r.stdout.trim()) raw.codex = JSON.parse(r.stdout);
-      } catch {}
-      this.raw = raw;
+        const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/usage.py`, "--limits"]);
+        if (r.code !== 0) throw new Error("Could not read account limits");
+        this.raw = JSON.parse(r.stdout);
+        this.errors = {};
+        if (!this.detail) setShared("usage.latest", this.raw);
+      } catch { this.errors.limits = "Could not refresh account limits; showing the last reading."; }
+      this.refreshing = false;
       this.fit();
       cx.notify();
     });
+  }
+
+  loadHistory(cx) {
+    const generation = ++this.historyGeneration;
+    this.historyLoading = true;
+    this.historyError = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/usage.py`, "--days", String(this.period), "--provider", this.providerFilter]);
+        if (r.code !== 0) throw new Error("The local history reader failed.");
+        const data = JSON.parse(r.stdout);
+        if (generation !== this.historyGeneration) return;
+        this.analytics = data;
+      } catch { if (generation === this.historyGeneration) this.historyError = "Unable to read local usage history. Press R to retry."; }
+      if (generation === this.historyGeneration) { this.historyLoading = false; cx.notify(); }
+    });
+  }
+
+  openDetails(provider) {
+    openOverlay({ mod: "sleek-usage", kind: "dialog", width: 0.92, height: 0.92, frame: "none", props: { detail: true, provider: provider ?? "all", tab: "limits" } });
   }
 
   shown(now) {
@@ -123,6 +127,7 @@ export default class Usage extends View {
 
   // The block is as tall as its providers: the edge, then each provider's three lines.
   fit() {
+    if (this.detail) return;
     const n = R("sidebar.usage", true) === false ? 0 : this.shown(Math.floor(Date.now() / 1000)).length;
     const px = !n ? 0 : this.narrow ? 8 + 8 + n * 24 + 4 : this.folded ? 34 : 44 + n * 62;
     const node = find(layout(), "usage");
@@ -132,22 +137,25 @@ export default class Usage extends View {
 
   // Sleek: a thin continuous bar instead of segments.
   bar(t, label, w, dim) {
-    const used = w?.used ?? 0;
+    const known = Boolean(w && !w.expired);
+    const used = known ? w.used : 0;
     const fill = pctColor(t, used);
     return h_flex().h(18).gap(8).items_center()
       .child(div().w(18).flex_none().text_color(t.dim).child(label))
       .child(thinBar(t, used, dim ? fill + "80" : fill))
-      .child(div().w(34).flex_none().text_right().text_color(w ? (used >= 85 ? t.blocked : t.foreground) : t.dim)
-        .child(w ? `${Math.round(used)}%` : "—"))
+      .child(div().w(34).flex_none().text_right().text_color(known ? (used >= 85 ? t.blocked : t.foreground) : t.dim)
+        .child(known ? `${Math.round(used)}%` : "—"))
       .child(div().w(50).flex_none().whitespace_nowrap().text_right().text_color(t.dim)
-        .child(w?.resets ? `↻ ${untilText(w.resets - Math.floor(Date.now() / 1000))}` : ""));
+        .child(w?.expired ? "↻ due" : w?.resets ? `↻ ${untilText(w.resets - Math.floor(Date.now() / 1000))}` : ""));
   }
 
   provider(t, p, now) {
     const d = p.data;
     const age = d?.at ? now - d.at : null;
     const pic = p.icon ? image(p.icon).w(13).h(13).flex_none() : null;
-    return v_flex().px(10).py(3).gap(1).when(!p.live, (el) => el.opacity(0.62))
+    return v_flex().id(`usage-provider-${p.id}`).px(10).py(3).gap(1).rounded(7).cursor_pointer()
+      .hover(h => h.bg(t.hover)).tooltip("Open detailed usage")
+      .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(p.id); }).when(!p.live, (el) => el.opacity(0.62))
       .child(h_flex().h(20).gap(7).items_center()
         .when(Boolean(pic), (el) => el.child(pic))
         .child(div().font_family(SANS).text_color(t.foreground).font_semibold().child(p.name))
@@ -159,7 +167,10 @@ export default class Usage extends View {
       .child(this.bar(t, "7d", d?.week, !p.live));
   }
 
-  render() {
+  renderDetails(cx) { return dashboard(this, cx); }
+
+  render(cx) {
+    if (this.detail) return this.renderDetails(cx);
     const t = theme();
     const now = Math.floor(Date.now() / 1000);
     const list = this.shown(now);
@@ -173,9 +184,10 @@ export default class Usage extends View {
     };
     // Folded: one line with each agent's 5-hour use, colored like its bar.
     const summary = list.map((p) => {
-      const used = p.data?.five?.used;
+      const used = p.data?.five?.expired ? null : p.data?.five?.used;
       const color = used == null ? t.dim : used >= 85 ? t.blocked : used >= 60 ? t.working : t.ansi4;
-      return h_flex().gap(4).flex_none()
+      return h_flex().id(`usage-summary-${p.id}`).gap(4).flex_none().cursor_pointer()
+        .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(p.id); })
         .child(div().font_family(SANS).text_color(t.dim).child(p.name.split(" ")[0]))
         .child(div().text_color(color).child(used == null ? "—" : `${Math.round(used)}%`));
     });
@@ -185,9 +197,9 @@ export default class Usage extends View {
     // Narrow sidebar: each agent's icon and 5-hour use, colored like its bar.
     if (this.narrow) {
       return watch(v_flex().id("root").size_full().min_h(0).px(6).pt(8).font_family(MONO()).text_size(10.5))
-        .child(v_flex().id("usage-rail").w_full().py(4).rounded(10).bg(glass(t.background)).tooltip("Usage (5-hour)")
+        .child(v_flex().id("usage-rail").w_full().py(4).rounded(10).bg(glass(t.background)).tooltip("Open detailed usage").cursor_pointer().on_click(() => this.openDetails(this.shown(now)[0]?.id))
           .children(list.map((p) => {
-            const used = p.data?.five?.used;
+            const used = p.data?.five?.expired ? null : p.data?.five?.used;
             const pic = p.icon ? image(p.icon).w(12).h(12).flex_none() : null;
             return h_flex().h(24).gap(5).items_center().justify_center().when(!p.live, (el) => el.opacity(0.62))
               .when(Boolean(pic), (el) => el.child(pic))
@@ -197,6 +209,9 @@ export default class Usage extends View {
     return watch(v_flex().id("root").size_full().min_h(0).font_family(MONO()).text_size(11))
       .child(box(t, {
         id: "usage", title: "usage", open, onToggle: toggle, summary,
+        extra: [div().id("usage-open-details").font_family(SANS).text_size(11).cursor_pointer()
+          .text_color(t.dim).hover(h => h.text_color(t.foreground)).tooltip("Open usage · prefix U")
+          .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(); }).child("details ↗")],
         body: v_flex().children(list.map((p) => this.provider(t, p, now))),
       }));
   }
