@@ -654,7 +654,7 @@ export default class Spaces extends View {
     // Personal (card polish): no glowing accent outline. Every card is the same quiet surface with
     // a neutral hairline; the shown one is a touch lighter and announced by its full-strength
     // number and bright name. Accent is kept for the focused agent row inside.
-    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 12).p(6).rounded(10)
+    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 12).px(6).pb(6).pt(2).rounded(10)
       .bg(glass(mixHex(t.background, t.foreground, on ? 0.05 : 0.025)))
       .border_1().border_color(tint(t.foreground, on ? 0.09 : 0.05))
       .when(Boolean(tree), (el) => el.ml(14))
