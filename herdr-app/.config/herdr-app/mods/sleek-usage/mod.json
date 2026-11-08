@@ -7,8 +7,8 @@
   },
   "overlay": {
     "kind": "dialog",
-    "width": 760,
-    "height": 0.78,
+    "width": 0.92,
+    "height": 0.92,
     "frame": "none"
   }
 }

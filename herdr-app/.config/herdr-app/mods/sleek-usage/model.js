@@ -15,7 +15,7 @@ export function windowOf(raw, now) {
   if (!Number.isFinite(used)) return null;
   const resets = epoch(raw.resets_at ?? raw.reset_at ?? raw.resetsAt);
   return { used: Math.max(0, Math.min(100, used)), resets,
-    expired: resets != null && resets <= now, minutes: Number(raw.window_minutes) || null };
+    expired: resets != null && resets <= now, at: epoch(raw.observed_at), minutes: Number(raw.window_minutes) || null };
 }
 export function readings(claude, codex, now) {
   const out = {};

@@ -33,7 +33,8 @@ import { shared as sqShared } from "herdr";
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
 const SANS = "Geist";
-import { WEEK, readings, untilText, dateText, pct, windowLabel } from "./model.js";
+import { WEEK, readings, untilText } from "./model.js";
+import { dashboard } from "./dashboard.js";
 
 const PROVIDERS = [
   { id: "claude", name: "claude code", app: "claude-code", icon: "icons/claude.svg" },
@@ -55,11 +56,20 @@ export default class Usage extends View {
     this.raw = shared("usage.latest") ?? {};
     this.errors = {};
     this.refreshing = false;
-    this.selected = props()?.provider ?? (agents().some(a => a.app === "codex") ? "codex" : "claude");
+    this.tab = props()?.tab ?? localStorage.getItem("usage.tab") ?? "cost";
+    this.providerFilter = props()?.provider ?? "all";
+    this.providerMenu = false;
+    this.period = 30;
+    this.breakdown = "model";
+    this.historyLoading = false;
+    this.analytics = null;
+    this.historyGeneration = 0;
     if (this.detail) { this.handle = cx.focus_handle(); this.handle.focus(); }
     this.folded = localStorage.getItem("folded") === "1";
     this.refresh(cx);
+    if (this.detail && this.tab !== "limits") this.loadHistory(cx);
     cx.timer.every(30000, (cx) => this.refresh(cx));
+    if (this.detail) cx.timer.every(60000, (cx) => { if (this.tab !== "limits") this.loadHistory(cx); });
   }
 
   refresh(cx) {
@@ -67,30 +77,38 @@ export default class Usage extends View {
     this.refreshing = true;
     cx.notify();
     cx.spawn(async (cx) => {
-      const raw = { ...this.raw }, errors = {};
       try {
-        const value = JSON.parse(await readTextFile(`${home()}/.cache/agent-usage/claude.json`));
-        if (!value?.rate_limits) throw new Error("No usage snapshot");
-        raw.claude = value;
-      } catch { errors.claude = "No new Claude reading available."; }
-      try {
-        const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/codex-limits.py`]);
-        if (r.code !== 0 || !r.stdout.trim()) throw new Error("No usage snapshot");
-        const value = JSON.parse(r.stdout);
-        if (!value?.rate_limits) throw new Error("No usage snapshot");
-        raw.codex = value;
-      } catch { errors.codex = "No new Codex reading available."; }
-      this.raw = raw;
-      this.errors = errors;
+        const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/usage.py`, "--limits"]);
+        if (r.code !== 0) throw new Error("Could not read account limits");
+        this.raw = JSON.parse(r.stdout);
+        this.errors = {};
+        if (!this.detail) setShared("usage.latest", this.raw);
+      } catch { this.errors.limits = "Could not refresh account limits; showing the last reading."; }
       this.refreshing = false;
-      if (!this.detail) setShared("usage.latest", raw);
       this.fit();
       cx.notify();
     });
   }
 
+  loadHistory(cx) {
+    const generation = ++this.historyGeneration;
+    this.historyLoading = true;
+    this.historyError = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/usage.py`, "--days", String(this.period), "--provider", this.providerFilter]);
+        if (r.code !== 0) throw new Error("The local history reader failed.");
+        const data = JSON.parse(r.stdout);
+        if (generation !== this.historyGeneration) return;
+        this.analytics = data;
+      } catch { if (generation === this.historyGeneration) this.historyError = "Unable to read local usage history. Press R to retry."; }
+      if (generation === this.historyGeneration) { this.historyLoading = false; cx.notify(); }
+    });
+  }
+
   openDetails(provider) {
-    openOverlay({ mod: "sleek-usage", kind: "dialog", width: 760, height: 0.78, frame: "none", props: { detail: true, provider } });
+    openOverlay({ mod: "sleek-usage", kind: "dialog", width: 0.92, height: 0.92, frame: "none", props: { detail: true, provider: provider ?? "all", tab: "limits" } });
   }
 
   shown(now) {
@@ -149,122 +167,10 @@ export default class Usage extends View {
       .child(this.bar(t, "7d", d?.week, !p.live));
   }
 
-  detailWindow(t, label, w, now) {
-    const valid = Boolean(w && !w.expired);
-    const color = valid ? pctColor(t, w.used) : t.dim;
-    const left = valid ? 100 - w.used : null;
-    return v_flex().flex_1().min_w(0).p(16).gap(10).rounded(10).bg(t.background)
-      .child(div().font_family(SANS).text_size(12).text_color(t.muted).child(windowLabel(w, label)))
-      .child(h_flex().gap(8).items_end()
-        .child(div().font_family(MONO()).text_size(30).font_semibold().text_color(color).child(valid ? pct(w.used) : "—"))
-        .child(div().pb(4).font_family(SANS).text_size(12).text_color(t.dim).child(valid ? "used" : "not available")))
-      .child(h_flex().h(8).child(thinBar(t, valid ? w.used : 0, color)))
-      .child(div().font_family(SANS).text_size(12).text_color(valid ? t.foreground : t.dim)
-        .child(valid ? `${pct(left)} remaining` : w?.expired ? `Last reported: ${pct(w.used)} used` : "No reading for this allowance yet"))
-      .child(v_flex().pt(6).gap(5)
-        .child(div().font_family(SANS).text_size(12).text_color(t.muted)
-          .child(w?.expired ? "Reset time has passed" : w?.resets ? `Resets in ${untilText(w.resets - now)}` : "Reset time not reported"))
-        .child(div().font_family(MONO()).text_size(11).text_color(t.dim)
-          .child(w?.resets ? dateText(w.resets) : "—")));
-  }
+  renderDetails(cx) { return dashboard(this, cx); }
 
-  renderDetails() {
-    const t = theme(), now = Math.floor(Date.now() / 1000);
-    const data = readings(this.raw.claude, this.raw.codex, now);
-    const provider = PROVIDERS.find(p => p.id === this.selected) ?? PROVIDERS[0];
-    const d = data[provider.id];
-    const count = agents().filter(a => a.app === provider.app).length;
-    const age = d?.at ? Math.max(0, now - d.at) : null;
-    const stale = age != null && age > 600;
-    const expired = Boolean(d?.five?.expired || d?.week?.expired);
-    const close = () => closeOverlay(props().overlay);
-    const choose = (id, cx) => { this.selected = id; this.handle.focus(); cx.notify(); };
-    const button = (id, text, action) => div().id(id).h(28).px(10).flex().items_center().justify_center()
-      .rounded(6).bg(t.background).font_family(SANS).text_size(12).text_color(t.muted).cursor_pointer()
-      .hover(h => h.bg(t.hover).text_color(t.foreground)).on_click(action).child(text);
-    const tabs = PROVIDERS.map((p, i) => {
-      const selected = provider.id === p.id;
-      return h_flex().id(`usage-tab-${p.id}`).flex_1().min_w(0).h(42).px(12).gap(8).items_center().rounded(8)
-        .bg(selected ? tint(t.accent, 0.14) : t.background).cursor_pointer().hover(h => h.text_color(t.foreground))
-        .text_color(selected ? t.foreground : t.muted)
-        .on_click((_e, cx) => choose(p.id, cx))
-        .child(image(p.icon).w(16).h(16).flex_none())
-        .child(div().flex_1().font_family(SANS).text_size(13).font_semibold().child(p.id === "claude" ? "Claude Code" : "Codex"))
-        .child(div().font_family(MONO()).text_size(10.5).text_color(t.dim).child(String(i + 1)));
-    });
-    const extra = [];
-    if (d?.extra?.length) {
-      extra.push(h_flex().gap(10).children(d.extra.map(w => this.detailWindow(t, w.label, w.value, now))));
-    }
-    if (d?.credits) {
-      const c = d.credits;
-      const balance = c.balance == null ? null : String(c.balance);
-      const text = c.unlimited === true ? "Unlimited credits"
-        : balance != null ? `${balance} credits remaining`
-        : c.has_credits === true ? "Credits available" : c.has_credits === false ? "No additional credits" : "Credit balance not reported";
-      extra.push(h_flex().px(14).py(12).gap(10).items_center().rounded(8).bg(t.background)
-        .child(div().flex_1().font_family(SANS).text_size(12).text_color(t.muted).child("Additional credits"))
-        .child(div().font_family(MONO()).text_size(12).text_color(t.foreground).child(text)));
-    }
-    return v_flex().id("usage-dialog").size_full().track_focus(this.handle)
-      .on_key_down((e, cx) => {
-        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
-        const key = e.key_char ?? e.key;
-        if (e.key === "escape" || (plain && key === "q")) { cx.stop_propagation(); close(); return; }
-        if (!plain) return;
-        if (key === "r" || key === "R") this.refresh(cx);
-        else if (key === "1") choose("claude", cx);
-        else if (key === "2") choose("codex", cx);
-        else if (["left", "right", "h", "l", "tab"].includes(key)) choose(provider.id === "claude" ? "codex" : "claude", cx);
-        else return;
-        cx.stop_propagation();
-      })
-      .child(v_flex().size_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
-        .bg(t.chrome).text_color(t.foreground).p(8).gap(8)
-        .child(h_flex().h(46).flex_none().px(12).gap(10).items_center().rounded(10).bg(t.background)
-          .child(div().h(22).px(8).flex_none().flex().items_center().rounded(6).font_family(MONO()).text_size(10.5).font_bold()
-            .bg(t.ansi4).text_color(t.background).child("USAGE"))
-          .child(div().flex_1().font_family(SANS).text_size(14).font_semibold().child("Usage & limits"))
-          .child(button("usage-refresh", this.refreshing ? "Refreshing…" : "Refresh", (_e, cx) => { this.handle.focus(); this.refresh(cx); }))
-          .child(button("usage-close", "×", close)))
-        .child(h_flex().flex_none().gap(6).children(tabs))
-        .child(v_flex().id("usage-detail-body").flex_1().min_h(0).overflow_y_scrollbar().p(8).gap(14)
-          .child(h_flex().gap(8).items_center()
-            .child(image(provider.icon).w(22).h(22).flex_none())
-            .child(div().font_family(SANS).text_size(16).font_semibold().child(provider.id === "claude" ? "Claude Code" : "Codex"))
-            .when(Boolean(d?.plan), el => el.child(div().px(8).py(3).rounded(5).bg(t.background)
-              .font_family(SANS).text_size(11).text_color(t.muted).child(String(d.plan))))
-            .child(div().flex_1())
-            .child(div().font_family(SANS).text_size(11).text_color(t.dim).child(`${count} open session${count === 1 ? "" : "s"}`)))
-          .child(h_flex().gap(10)
-            .child(this.detailWindow(t, "5-hour allowance", d?.five, now))
-            .child(this.detailWindow(t, "Weekly allowance", d?.week, now)))
-          .children(extra)
-          .child(v_flex().p(14).gap(7).rounded(8).bg(t.background)
-            .child(h_flex().gap(8)
-              .child(div().font_family(SANS).text_size(12).text_color(t.muted).child("Last provider update"))
-              .child(div().flex_1())
-              .child(div().font_family(SANS).text_size(12).text_color(t.dim)
-                .child(age == null ? "Not available" : age < 60 ? "Just now" : `${untilText(age)} ago`)))
-            .when(Boolean(d?.at), el => el.child(div().font_family(MONO()).text_size(11).text_color(t.dim).child(dateText(d.at))))
-            .child(div().font_family(SANS).text_size(12).text_color(t.dim)
-              .child(!d ? "Run a request in this provider to record usage. Allowances appear when the provider reports them."
-                : expired ? "Waiting for a provider reading after reset. Previous percentages do not describe the new window."
-                : stale ? "This reading may be out of date. Usage updates when the provider reports new activity."
-                : "These are the latest reported account limits, shared across sessions."))
-            .when(Boolean(this.errors[provider.id]), el => el.child(div().font_family(SANS).text_size(11).text_color(t.dim)
-              .child(this.errors[provider.id])))))
-        .child(h_flex().h(34).flex_none().px(10).gap(8).items_center().font_family(SANS).text_size(11).text_color(t.dim)
-          .child(div().font_family(MONO()).child("1 / 2"))
-          .child(div().child("provider"))
-          .child(div().font_family(MONO()).ml(8).child("r"))
-          .child(div().child("reload reading"))
-          .child(div().flex_1())
-          .child(div().child("Local times · Esc closes"))));
-  }
-
-  render() {
-    if (this.detail) return this.renderDetails();
+  render(cx) {
+    if (this.detail) return this.renderDetails(cx);
     const t = theme();
     const now = Math.floor(Date.now() / 1000);
     const list = this.shown(now);
