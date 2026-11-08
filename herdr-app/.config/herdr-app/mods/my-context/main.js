@@ -8,7 +8,7 @@
 // It follows the focused pane; focusing a non-Claude pane keeps the last Claude session shown.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, TextView } from "gpui-base";
+import { v_flex, h_flex, TextView, InputState, Input } from "gpui-base";
 import { agents, focused, exec, appHome, theme, shared } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
@@ -43,6 +43,10 @@ export default class Context extends View {
     this.openFile = null;    // the instruction file expanded
     this.openSkill = null;   // the skill whose description is expanded
     this.busy = false;
+    // Search: every word must appear in the skill's name or description (any case).
+    this.query = "";
+    this.search = InputState.new({ placeholder: "Search skills by name or description" });
+    this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     cx.timer.every(10000, (cx) => this.refresh(cx));  // skills get loaded as the session goes on
   }
 
@@ -84,6 +88,11 @@ export default class Context extends View {
     const files = d?.files ?? [], skills = d?.skills ?? [];
     const loaded = skills.filter((s) => s.loaded);
     const sorted = [...loaded, ...skills.filter((s) => !s.loaded)];
+    const words = this.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = words.length ? sorted.filter((s) => {
+      const hay = `${s.name} ${s.description}`.toLowerCase();
+      return words.every((w) => hay.includes(w));
+    }) : sorted;
 
     const label = (text, count) => h_flex().h(22).flex_none().px(10).gap(6).items_center()
       .text_size(11).font_semibold().text_color(t.muted)
@@ -155,13 +164,25 @@ export default class Context extends View {
         .child(note("Read in whole at the start of the session and kept for every turn."))
         // Skills
         .child(h_flex().mt(6).flex_none().items_center()
-          .child(label("Skills", skills.length))
+          .child(label("Skills", words.length ? `${shown.length} of ${skills.length}` : skills.length))
           .child(div().flex_1())
           .child(h_flex().pr(10).gap(10).flex_none().font_family(MONO).text_size(10.5).text_color(t.dim)
             .child(h_flex().gap(5).items_center().child(div().size(6).rounded(3).bg(t.done)).child(`${loaded.length} loaded`))
             .child(h_flex().gap(5).items_center().child(div().size(6).rounded(3).border(1.2).border_color(t.dim)).child(`${skills.length - loaded.length} listed`))))
-        .child(v_flex().flex_none().p(4).gap(1).rounded(10).bg(card).children(sorted.map(skillRow))
-          .when(!skills.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No skills in this session."))))
+        // Search field: a filled bar like the cards; Esc or × clears it.
+        .when(skills.length > 0, (el) => el.child(h_flex().id("skill-search").h(32).flex_none().px(10).gap(8).items_center().rounded(10).bg(card)
+          .on_key_down((e, cx) => {
+            if (e.key === "escape" && this.query) { this.search.set_value(""); this.query = ""; cx.stop_propagation(); cx.notify(); }
+          })
+          .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(words.length ? t.foreground : t.dim))
+          .child(Input.new(this.search).flex_1().h_full().text_size(12).text_color(t.foreground))
+          .when(Boolean(this.query), (e) => e.child(div().id("skill-search-clear").size(18).flex_none().flex().items_center().justify_center()
+            .rounded(4).cursor_pointer().text_color(t.dim).hover((h) => h.bg(tint(t.foreground, 0.06)).text_color(t.foreground))
+            .on_click((_e, cx) => { this.search.set_value(""); this.query = ""; cx.notify(); })
+            .child(svg("mods/workspace-chrome/x.svg").size(12))))))
+        .child(v_flex().flex_none().p(4).gap(1).rounded(10).bg(card).children(shown.map(skillRow))
+          .when(!skills.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No skills in this session.")))
+          .when(skills.length > 0 && !shown.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(`No skills match “${this.query.trim()}”.`))))
         .child(note("Listed: Claude sees only the name and description. Loaded: the skill was used, so its full instructions are in context."))
         .child(div().h(6).flex_none())));
   }
