@@ -513,7 +513,7 @@ export default class Spaces extends View {
     if (st === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
     if (st === "blocked") return div().size(14).flex_none().rounded(3).bg(t.blocked + "26").text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (st === "done") return div().size(7).mx(3).flex_none().rounded(4).bg(t.done);
-    if (st === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim);
+    // Idle shows nothing (design rule): a ring on every quiet row is noise.
     return div().size(7).mx(3).flex_none();
   }
 
@@ -529,23 +529,26 @@ export default class Spaces extends View {
     const kids = ctx.all.filter((k) => k.parent === a.address && k.state === "live");
     return [
       // Sleek: the shown agent gets a filled highlight (like the open half of a toggle).
-      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 36).flex_none().px(8).gap(9).items_center().rounded(7).cursor_pointer()
-        .when(a.focused, (h) => h.bg(glass(t.selected)))
+      // Personal (card polish): the shown agent is the "you are here" selection (accent wash);
+      // the meta line is words in Geist, the age in Geist Mono; the program is the icon, so its
+      // name isn't repeated in lowercase underneath.
+      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 40).flex_none().px(8).gap(10).items_center().rounded(7).cursor_pointer()
+        .when(a.focused, (h) => h.bg(tint(t.accent, 0.14)))
         .when(!a.focused, (h) => h.hover((x) => x.bg(tint(t.foreground, 0.04))))
         .on_click(() => run("pane.focus", a.pane ? { pane: a.pane } : { terminal: a.address }))
-        .child(div().w(16).flex_none().flex().items_center().justify_center().when(Boolean(pic), (el) => el.child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(2)
+        .child(div().id(`ag-icon-${a.address}`).w(16).flex_none().flex().items_center().justify_center().tooltip(a.program?.name ?? prog)
+          .when(Boolean(pic), (el) => el.child(pic)))
+        .child(v_flex().flex_1().min_w(0).gap(3)
           .child(name
-            ? div().w_full().truncate().h(16).text_size(12.5).text_color(quiet ? t.muted : t.foreground).when(a.focused, (d) => d.font_semibold()).child(name)
+            ? div().w_full().truncate().h(16).text_size(12.5).text_color(quiet ? t.muted : t.foreground).child(name)
             : div().w_full().truncate().h(16).text_size(12.5).italic().text_color(t.dim).child("untitled"))
-          .child(h_flex().w_full().min_w(0).h(13).gap(5).items_center().font_family(ctx.mono).text_size(10.5).text_color(t.dim)
-            .when(Boolean(workspace), el => el.child(div().flex_1().min_w(0).truncate().font_family(SANS)
+          .child(h_flex().w_full().min_w(0).h(13).gap(5).items_center().font_family(SANS).text_size(11).text_color(t.dim)
+            .when(Boolean(workspace), el => el.child(div().flex_shrink_1().min_w(0).truncate()
               .text_color(spaceTone(t, workspace)).tooltip(`${workspace.name}${workspace.machine ? ` @${workspace.machine}` : ""} · ${prog}`)
-              .child(workspace.name)))
-            .when(!workspace, el => el.child(div().flex_none().child(prog)))
-            .when(tabIndex != null, (el) => el.child(div().flex_none().child(`· tab ${tabIndex}`)))
-            .when(Boolean(when), (el) => el.child(div().flex_none().child(`· ${duration(ctx.now - when)}`)))
-            .when(Boolean(machine), (el) => el.child(div().flex_none().text_color(t.muted).child(`@${machine}`)))))
+              .child(workspace.name)).child(div().flex_none().child("·")))
+            .when(tabIndex != null, (el) => el.child(div().flex_none().child(`Tab ${tabIndex}`)))
+            .when(Boolean(when), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).text_size(10.5).child(duration(ctx.now - when))))
+            .when(Boolean(machine), (el) => el.child(div().flex_none().font_family(ctx.mono).text_color(t.muted).child(`@${machine}`)))))
         .child(h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))),
       // Sub-agents an agent started: one quiet line each, click to peek.
       ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(29).pr(10).gap(7).items_center()
@@ -636,7 +639,7 @@ export default class Spaces extends View {
         .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12)));
 
     const body = mine.length
-      ? v_flex().pt(1).gap(6).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
+      ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
       : h_flex().id(`empty-${w.id}`).h(26).px(10).items_center().rounded(6).cursor_pointer()
           .font_family(SANS).text_size(11.5).text_color(t.dim)
           .hover((el) => el.bg(tint(t.foreground, 0.04)).text_color(t.muted))
@@ -648,9 +651,12 @@ export default class Spaces extends View {
     // Personal (card separation): every card is a raised surface with a hairline edge and a
     // wider gap between cards than inside them, so each workspace reads as its own block and
     // the list reads apart from the "Workspaces" header. The shown one: accent wash + accent edge.
-    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 10).p(4).rounded(10)
-      .bg(glass(on ? mixHex(t.background, t.accent, 0.09) : mixHex(t.background, t.foreground, 0.035)))
-      .border_1().border_color(on ? tint(t.accent, 0.28) : tint(t.foreground, 0.045))
+    // Personal (card polish): no glowing accent outline. Every card is the same quiet surface with
+    // a neutral hairline; the shown one is a touch lighter and announced by its full-strength
+    // number and bright name. Accent is kept for the focused agent row inside.
+    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 12).p(6).rounded(10)
+      .bg(glass(mixHex(t.background, t.foreground, on ? 0.05 : 0.025)))
+      .border_1().border_color(tint(t.foreground, on ? 0.09 : 0.05))
       .when(Boolean(tree), (el) => el.ml(14))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
