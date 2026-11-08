@@ -5,7 +5,8 @@
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
-PACKAGES=(zsh tmux nvim herdr herdr-app opencode claude)
+# herdr-app is copied, not linked (step 5b): Herdr refuses symlinked mods and rewrites its files.
+PACKAGES=(zsh tmux nvim herdr opencode claude)
 BACKUP_DIR="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)"
 
 # 1. Homebrew
@@ -42,6 +43,15 @@ done
 # 5. Link everything (--no-folding: link files, never whole folders)
 stow --no-folding -d "$DOTFILES" -t "$HOME" -R "${PACKAGES[@]}"
 echo "Linked: ${PACKAGES[*]}"
+
+# 5b. Herdr desktop app: copy, don't link. Herdr rejects mod files whose real path is outside
+#     ~/.config/herdr-app (so symlinked mods fail to load), and it saves by replacing files.
+#     rsync writes each file atomically; any file it replaces goes to the backup folder.
+#     After changing things in the app, ./sync-herdr-app.sh copies them back into this repo.
+mkdir -p "$HOME/.config/herdr-app"
+rsync -a --backup --backup-dir="$BACKUP_DIR/.config/herdr-app" \
+  "$DOTFILES/herdr-app/.config/herdr-app/" "$HOME/.config/herdr-app/"
+echo "Copied: herdr-app"
 [[ -d "$BACKUP_DIR" ]] && echo "Replaced files saved in $BACKUP_DIR"
 
 # 6. Codex: put the conversation name in the terminal title, so Herdr's sidebar can show it.

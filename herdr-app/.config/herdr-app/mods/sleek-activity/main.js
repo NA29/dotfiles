@@ -276,7 +276,7 @@ export default class Activity extends View {
       localStorage.setItem("folded", this.open ? "0" : "1");
       cx.notify();
     };
-    fit(layout, run, "activity", 8 + 36 + (this.open ? Math.max(1, shown.length) * ROW + 6 + (all.length ? 28 : 0) : 0) + 4);
+    fit(layout, run, "activity", 34 + (this.open ? 2 + Math.max(1, shown.length) * ROW + (all.length ? 28 : 0) + 8 : 0));
     const latest = all[0];
     const footer = h_flex().id("act-all").h(26).mt(2).mx(4).px(8).gap(6).items_center().justify_center().cursor_pointer()
       .rounded(6).text_color(t.dim)
@@ -295,7 +295,7 @@ export default class Activity extends View {
           .child(this.pill(t, r.status))
           .when(Boolean(took(r.took)), (el) => el.child(div().flex_none().text_color(t.dim).child(took(r.took)))))
       : [div().h(ROW).px(10).flex().items_center().font_family(SANS).text_color(t.dim).child("quiet so far")];
-    return v_flex().id("root").size_full().min_h(0).px(8).pt(8).font_family(MONO).text_size(11)
+    return v_flex().id("root").size_full().min_h(0).font_family(MONO).text_size(11)
       .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } })
       .child(box(t, {
         id: "activity", title: "activity", open: this.open, onToggle: toggle,

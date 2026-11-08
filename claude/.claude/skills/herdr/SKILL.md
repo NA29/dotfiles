@@ -13,6 +13,8 @@ Before issuing any control command, verify that this agent is running inside a H
 test "${HERDR_ENV:-}" = 1
 ```
 
+If the check fails but `HC_TERMINAL_SOCKET` is set, you are inside the Herdr desktop app, not this terminal Herdr: use the `herdr-app` skill instead of stopping, and do not use this `herdr` CLI (it controls a separate session).
+
 If the check fails, say that you are not running inside Herdr and stop. Do not inspect or control the focused Herdr session from outside Herdr.
 
 When the check passes, the `herdr` binary in `PATH` talks to the current session. Use it to inspect neighboring work, create terminal layout, start agents and commands, read output, and wait for state changes.

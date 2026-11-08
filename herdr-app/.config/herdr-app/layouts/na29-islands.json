@@ -40,7 +40,9 @@
                   "size": {
                     "weight": 1
                   },
-                  "min": 90
+                  "min": 90,
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 },
                 {
                   "id": "activity",
@@ -50,7 +52,9 @@
                   },
                   "size": {
                     "px": 60
-                  }
+                  },
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 },
                 {
                   "id": "usage",
@@ -60,9 +64,16 @@
                   },
                   "size": {
                     "px": 164
-                  }
+                  },
+                  "background": "#eeeeef0f",
+                  "radius": 7
                 }
-              ]
+              ],
+              "padding": [
+                0,
+                5
+              ],
+              "gap": 5
             },
             {
               "id": "sidebar-footer",
@@ -83,9 +94,9 @@
           },
           "min": 44,
           "max": 480,
-          "background": "#010409b3",
+          "background": "#010409bf",
           "resizable": false,
-          "radius": 10,
+          "radius": 12,
           "border": {
             "width": 1,
             "color": "border"
@@ -105,8 +116,8 @@
                 "px": 40
               },
               "window_drag": true,
-              "background": "#010409b3",
-              "radius": 10,
+              "background": "#010409bf",
+              "radius": 12,
               "border": {
                 "width": 1,
                 "color": "border"
@@ -127,7 +138,7 @@
                         "width": 1,
                         "color": "accent"
                       },
-                      "radius": 10,
+                      "radius": 12,
                       "gap": 5,
                       "lone": true,
                       "border": {
@@ -169,8 +180,8 @@
                   "min": 280,
                   "max": 900,
                   "hidden": true,
-                  "background": "#010409b3",
-                  "radius": 10,
+                  "background": "#010409bf",
+                  "radius": 12,
                   "border": {
                     "width": 1,
                     "color": "border"
@@ -192,8 +203,8 @@
               "size": {
                 "px": 32
               },
-              "background": "#010409b3",
-              "radius": 10,
+              "background": "#010409bf",
+              "radius": 12,
               "border": {
                 "width": 1,
                 "color": "border"
@@ -214,13 +225,10 @@
           "gap": 0
         }
       ],
-      "background": "#000000b3"
+      "background": "#000000b0"
     }
   ],
-  "background": {
-    "image": "backgrounds/98473741_p0-ee62c4.jpg",
-    "fit": "cover"
-  },
+  "background": "#08070c",
   "terminal_padding": [
     14,
     12

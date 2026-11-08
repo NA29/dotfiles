@@ -124,7 +124,7 @@ export default class Usage extends View {
   // The block is as tall as its providers: the edge, then each provider's three lines.
   fit() {
     const n = R("sidebar.usage", true) === false ? 0 : this.shown(Math.floor(Date.now() / 1000)).length;
-    const px = !n ? 0 : this.narrow ? 8 + 8 + n * 24 + 4 : this.folded ? 52 : 52 + n * 62;
+    const px = !n ? 0 : this.narrow ? 8 + 8 + n * 24 + 4 : this.folded ? 34 : 44 + n * 62;
     const node = find(layout(), "usage");
     if (node && node.size?.px !== px) run(px ? "layout.show" : "layout.hide", { id: "usage" });
     if (node && px && node.size?.px !== px) run("layout.resize", { id: "usage", px });
@@ -147,7 +147,7 @@ export default class Usage extends View {
     const d = p.data;
     const age = d?.at ? now - d.at : null;
     const pic = p.icon ? image(p.icon).w(13).h(13).flex_none() : null;
-    return v_flex().px(8).py(3).gap(1).when(!p.live, (el) => el.opacity(0.62))
+    return v_flex().px(10).py(3).gap(1).when(!p.live, (el) => el.opacity(0.62))
       .child(h_flex().h(20).gap(7).items_center()
         .when(Boolean(pic), (el) => el.child(pic))
         .child(div().font_family(SANS).text_color(t.foreground).font_semibold().child(p.name))
@@ -194,7 +194,7 @@ export default class Usage extends View {
               .child(div().text_color(used == null ? t.dim : pctColor(t, used)).child(used == null ? "—" : `${Math.round(used)}%`));
           })));
     }
-    return watch(v_flex().id("root").size_full().min_h(0).px(8).pt(8).font_family(MONO()).text_size(11))
+    return watch(v_flex().id("root").size_full().min_h(0).font_family(MONO()).text_size(11))
       .child(box(t, {
         id: "usage", title: "usage", open, onToggle: toggle, summary,
         body: v_flex().children(list.map((p) => this.provider(t, p, now))),

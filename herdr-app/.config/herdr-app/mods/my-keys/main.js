@@ -130,6 +130,21 @@ function applyLook(root, r) {
   const body = find(root, "work-body");
   if (body) { body.padding = [gap, 0]; body.gap = gap; }
 
+  // Sidebar sections (Workspaces, Activity, Usage) are inset cards on the sidebar island, with
+  // the island's gap between them, so each reads as its own group and a long workspace list
+  // ends at its card's edge instead of running into the next section.
+  const lists = find(root, "sidebar-lists");
+  if (lists) { lists.padding = [0, gap]; lists.gap = gap; }
+  // A veil of the theme's text colour (6%): lighter than the island on any dark theme, where the
+  // theme's card colour is nearly the island's own.
+  const veil = (hex6(t.foreground) ?? "#e0def4") + "0f";
+  for (const id of ["spaces", "activity", "usage"]) {
+    const n = find(root, id);
+    if (!n) continue;
+    n.background = veil;
+    n.radius = Math.max(0, radius - gap);   // nested corners: inner = outer − inset
+  }
+
   const pane = find(root, "main")?.content?.pane;
   if (pane) {
     pane.radius = radius;

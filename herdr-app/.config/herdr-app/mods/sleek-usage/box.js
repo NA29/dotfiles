@@ -19,15 +19,19 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function box(t, { id, title, open, onToggle, summary = [], extra = [], body }) {
   const bits = open ? extra : summary;
-  return v_flex().w_full().flex_none().rounded(10).bg(glass(t.background)).p(4)
+  // No fill of its own: the layout draws the section card (my-keys applyLook), so a fill here
+  // would be a card inside a card.
+  // Spacing matches the Workspaces section: 34px header, title 14px from the card's edge, rows
+  // indented so their text lines up under it, 8px below the last row.
+  return v_flex().w_full().flex_none().when(open, (el) => el.pb(8))
     // Hovering the header brightens its title and chevron (no nested highlight).
-    .child(h_flex().id(`${id}-head`).h(28).px(8).gap(8).items_center().rounded(7).cursor_pointer()
+    .child(h_flex().id(`${id}-head`).h(34).pl(14).pr(14).gap(8).items_center().rounded(7).cursor_pointer()
       .text_color(t.muted).hover((h) => h.text_color(t.foreground)).on_click(onToggle)
       .child(div().flex_none().font_family(SANS).text_size(12).font_semibold().child(cap(title)))
       .child(div().flex_1())
       .when(bits.length > 0, (el) => el.child(h_flex().flex_shrink_1().min_w(0).gap(8).items_center().children(bits)))
       .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none()))
-    .when(open, (el) => el.child(v_flex().pt(2).child(body)));
+    .when(open, (el) => el.child(v_flex().pt(2).px(4).child(body)));
 }
 
 function find(node, id) {

@@ -636,9 +636,12 @@ export default class Spaces extends View {
 
     // Cards use the terminal panes' own background, so the window has only two surface colors;
     // the shown workspace stands out by its filled badge and brighter name.
-    return v_flex().relative().w_full().flex_none().mt(6).p(4).rounded(10)
-      // The shown workspace's card carries a faint wash of the accent ("you are here").
-      .bg(glass(on ? mixHex(t.background, t.accent, 0.07) : t.background))
+    // Personal (card separation): every card is a raised surface with a hairline edge and a
+    // wider gap between cards than inside them, so each workspace reads as its own block and
+    // the list reads apart from the "Workspaces" header. The shown one: accent wash + accent edge.
+    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 10).p(4).rounded(10)
+      .bg(glass(on ? mixHex(t.background, t.accent, 0.09) : mixHex(t.background, t.foreground, 0.035)))
+      .border_1().border_color(on ? tint(t.accent, 0.28) : tint(t.foreground, 0.045))
       .when(Boolean(tree), (el) => el.ml(14))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
@@ -707,6 +710,8 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).text_size(13)
       // Click the header to fold the whole list away (remembered).
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
+        // Personal: a hairline under the section header so it reads apart from the cards.
+        .when(!collapsed && !this.listFolded, el => el.mx(8).pl(6).pr(0).border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
             this.listFolded = !this.listFolded;
