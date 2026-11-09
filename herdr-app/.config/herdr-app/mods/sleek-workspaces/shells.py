@@ -19,6 +19,7 @@ import subprocess
 MIN_AGE = 5  # seconds: skips the short commands agents run all the time
 NOISE = re.compile(r"(^|[/\s_-])(mcp|caffeinate)([/\s_-]|$)|shells\.py|hook\.py|extract\.py", re.I)
 SHELLS = {"sh", "bash", "zsh", "fish", "dash"}
+WATCHER = re.compile(r"kill -0|tail\b.*--pid|\bwait\b")  # waits on another job instead of working
 # How Claude Code runs a command. macOS hides the environment of its own binaries (zsh, sleep), so
 # these are recognised by shape; the real command is what's eval'd.
 WRAPPER = re.compile(r"\.claude/shell-snapshots/.*? eval '((?:[^']|'\\'')*)'")
@@ -63,7 +64,8 @@ def label(pid, procs):
     """Claude's command, or a shell script's own line (agent.sh opencode M1), or the command."""
     wrapped = WRAPPER.search(procs[pid]["cmd"])
     if wrapped:
-        return wrapped.group(1).replace("'\\''", "'")[:80]
+        command = wrapped.group(1).replace("'\\''", "'")
+        return re.sub(r"^cd\s+(\"[^\"]*\"|'[^']*'|\S+)\s*(;|&&)\s*", "", command)[:80]
     parent = procs.get(procs[pid]["ppid"])
     if parent:
         words = parent["cmd"].split()
@@ -146,11 +148,13 @@ def main():
             "pid": top, "terminal": terminal, "session": session, "cwd": dirs.get(top),
             "age": procs[top]["age"], "label": label(top, procs), "log": log,
         })
-    # A shell that only launched a detached job sits there empty beside it: the job says it all.
+    # A shell that only launched or waits on a detached job sits there empty: the job says it all.
     def launcher(job):
-        return job["pid"] in wrappers and os.path.getsize(job["log"]) == 0 and any(
-            other["pid"] not in wrappers and other["cwd"] == job["cwd"] and abs(other["age"] - job["age"]) <= 3
-            for other in jobs
+        return job["pid"] in wrappers and os.path.getsize(job["log"]) == 0 and (
+            WATCHER.search(procs[job["pid"]]["cmd"].split(" eval ", 1)[-1]) or any(
+                other["pid"] not in wrappers and other["cwd"] == job["cwd"] and abs(other["age"] - job["age"]) <= 3
+                for other in jobs
+            )
         )
     jobs = [job for job in jobs if not launcher(job)]
     jobs.sort(key=lambda j: j["age"])

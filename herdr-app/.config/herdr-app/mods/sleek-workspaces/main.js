@@ -77,6 +77,8 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
+// Background shells shown before the rest fold into a "more" row.
+const JOB_ROWS = 3;
 
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
@@ -235,6 +237,7 @@ export default class Spaces extends View {
     this.refreshShells(cx);
     cx.timer.every(5000, cx => this.refreshShells(cx));
     this.jobs = []; // background shells, from shells.py
+    this.jobsOpen = new Set(); // agents and workspaces showing all their shells
     this.refreshJobs(cx);
     cx.timer.every(5000, cx => this.refreshJobs(cx));
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
@@ -624,6 +627,25 @@ export default class Spaces extends View {
     run("terminal.peek", { terminal });
   }
 
+  // A group's shells, newest first. Folding one row away saves nothing, so a list only folds when
+  // at least two would be hidden.
+  jobRows(t, jobs, key, ctx, workspace) {
+    const folds = jobs.length > JOB_ROWS + 1;
+    const open = Boolean(this.jobsOpen?.has(key));
+    const shown = folds && !open ? jobs.slice(0, JOB_ROWS) : jobs;
+    const rows = shown.map((job) => this.jobRow(t, job, ctx, workspace));
+    if (!folds) return rows;
+    return [...rows, h_flex().id(`jobs-more-${key}`).h(24).flex_none().pl(workspace ? 29 : 59).pr(14).gap(8).items_center().rounded(ROW_R())
+      .font_family(SANS).text_size(11).text_color(t.muted).cursor_pointer()
+      .hover((el) => el.bg(t.hover))
+      .on_click((_e, cx) => {
+        if (open) this.jobsOpen.delete(key); else this.jobsOpen.add(key);
+        cx.notify();
+      })
+      .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
+      .child(div().flex_1().min_w(0).truncate().child(open ? "Show fewer" : `${jobs.length - JOB_ROWS} more`))];
+  }
+
   // One background shell: a quiet line like a sub-agent's, click to read its output.
   jobRow(t, job, ctx, workspace) {
     return h_flex().id(`job-${job.pid}`).h(24).flex_none().pl(workspace ? 29 : 59).pr(14).gap(8).items_center().rounded(ROW_R())
@@ -728,7 +750,7 @@ export default class Spaces extends View {
         .child(div().flex_none().text_color(t.dim).child("↳"))
         .child(div().flex_1().min_w(0).truncate().font_family(SANS).child(k.name || k.template || k.program?.name || k.address))
         .child(h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, k.status === "error" ? "blocked" : k.status === "done" ? "idle" : k.status)))),
-      ...(ctx.jobsOf.get(a.address) ?? []).map((job) => this.jobRow(t, job, ctx, workspace)),
+      ...this.jobRows(t, ctx.jobsOf.get(a.address) ?? [], a.address, ctx, workspace),
     ];
   }
 
@@ -823,7 +845,7 @@ export default class Spaces extends View {
       // Folded: every status with its count. Open: nothing, the rows right below say it.
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))));
 
-    const loose = (ctx.looseJobs.get(w.id) ?? []).map((job) => this.jobRow(t, job, ctx, null));
+    const loose = this.jobRows(t, ctx.looseJobs.get(w.id) ?? [], w.id, ctx, null);
     const body = mine.length || loose.length
       ? v_flex().pt(2).gap(2).children([...mine.flatMap((a) => this.agentRow(t, a, ctx)), ...loose])
       : h_flex().id(`empty-${w.id}`).h(24).pl(59).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
