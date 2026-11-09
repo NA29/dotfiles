@@ -23,7 +23,9 @@ let elements=[],calls=[],mode='agents';
 class Element{
  constructor(){return new Proxy(this,{get:(o,k,r)=>k in o?o[k]:(...a)=>r});}
  id(id){this.identifier=id;elements.push(this);return this;}
- child(x){assert.notEqual(x,null);return this;}
+ child(x){assert.notEqual(x,null);if(typeof x==='string')this.text=x;return this;}
+ tooltip(x){this.tip=x;return this;}
+ on_mouse_down(_b,f){this.down=f;return this;}
  children(xs){xs.forEach(x=>this.child(x));return this;}
  when(c,f){if(c)f(this);return this;}
  on_click(f){this.click=f;return this;}
@@ -151,3 +153,42 @@ view.jobs = [];
 render();
 assert.equal(view.ctx.bySpace.get('one')[0].status,'idle');
 console.log('PASS: detached statusless agent with two displayed shells shows waiting in Spaces and Attention, then clears when shells finish.');
+// Shells live behind the waiting dot, never in the agent list.
+const shell={pid:201,terminal:'w',cwd:'/repo',label:'pnpm test',age:120,log:'/repo/logs/test.log'};
+scope.agents=()=>[{...fixture[0],address:'w',pane:'p-w',tab:'t1',status:'idle',app:'opencode'}];
+scope.panes=()=>[{terminal:'w',pane:'p-w',tab:'t1',cwd:'/repo'}];
+view.jobs=[shell];view.jobsAt=Date.now();view.shellReadings={};
+state.rice['sidebar.agentView']='workspaces';
+const overlays=[];scope.openOverlay=spec=>{overlays.push(spec);return 'o';};
+render();
+assert(!elements.some(e=>/^(job-|jobs-more-)/.test(e.identifier??'')),'no inline shell rows');
+const dot=elements.find(e=>e.identifier==='shells-w');
+assert.equal(dot.tip,'Waiting for background shells');
+let stops=0;const stopping={notify(){},stop_propagation(){stops++;}};
+dot.down({},stopping);dot.click({},stopping);
+assert.equal(stops,2,'the dot must keep its press and click from the row');
+assert(!calls.some(c=>c[0]==='run'&&c[1]==='pane.focus'));
+assert.equal(overlays.at(-1).props.shellMenu,true);assert.equal(overlays.at(-1).props.agent,'w');
+const popupProps={overlay:'shells',shellMenu:true,agent:'w',title:'Tests',program:'OpenCode',jobs:[shell]};
+const renderPopup=()=>{elements=[];calls=[];view.renderShellMenu();};
+scope.props=()=>popupProps;view.menuHandle={focus(){}};view.menuAt=0;view.sawShells=true;
+renderPopup();
+assert.equal(scope.shellDetail(shell),'logs/test.log');
+const pick=elements.find(e=>e.identifier==='shell-pick-201');assert(pick,'shell listed');
+scope.hc=async()=>({code:0,stdout:'{"address":"v1"}'});scope.terminals=()=>[{address:'v1'}];
+let opening;const spawning={...stopping,spawn:f=>{opening=f(stopping);}};
+pick.click({},spawning);await opening;
+assert(calls.some(c=>c[0]==='run'&&c[1]==='terminal.peek'&&c[2].terminal==='v1'),'existing viewer opens');
+assert(calls.some(c=>c[0]==='close'),'popup closes once the viewer is open');
+view.openingPid=undefined;
+view.jobs=[{...shell,pid:202,label:'pnpm build'}];renderPopup();
+assert(elements.find(e=>e.identifier==='shell-pick-202'),'list follows shells starting');
+assert(!elements.find(e=>e.identifier==='shell-pick-201'),'list follows shells finishing');
+view.jobs=[];renderPopup();
+assert.equal(elements.find(e=>e.identifier==='shell-empty-title').text,'All shells finished');
+view.sawShells=false;scope.props=()=>({...popupProps,jobs:[],reported:2});renderPopup();
+assert.equal(elements.find(e=>e.identifier==='shell-empty-title').text,'Shell details unavailable');
+view.jobsFailed=true;renderPopup();
+assert.equal(elements.find(e=>e.identifier==='shell-empty-title').text,"Couldn't read shells");
+view.jobsFailed=false;
+console.log('PASS: shells stay out of the agent list, the dot opens a live popup without focusing the row, and empty states are clear.');

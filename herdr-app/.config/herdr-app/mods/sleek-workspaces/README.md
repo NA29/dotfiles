@@ -19,7 +19,7 @@ In **Agents** and **Attention**, a strip of workspace pills sits under the heade
 The shared state rule applies to every agent, including Claude Code, Codex and
 OpenCode: an idle/done agent with live background shells belonging to its exact
 terminal is shown as `waiting`. Jobs are discovered by the existing shell scanner.
-Status uses the same job association as the visible child rows, including the
+Status uses the same job association as the shell popup, including the
 existing folder fallback for detached sessions with no viewer terminal ID.
 
 Native terminal signals supplement process discovery: Claude's latest completion
@@ -27,11 +27,14 @@ footer supplies its shell count. Codex's background-terminal banner supplies its
 count, and its current `Ready` status allows waiting even when core still reports
 `working`. A Codex `Working` footer keeps the running indicator. Approval requests
 always keep priority. Unknown agents use the shared ownership rule without a TUI
-parser. Detached jobs assigned to an agent by the child-row association also contribute
+parser. Detached jobs assigned to an agent by the popup's association also contribute
 to its waiting count. Jobs assigned only to a workspace do not change an agent's status.
 
-Waiting rows show only a muted native pulse (shell count on hover), with their own Attention
-group. Reads/scans run every five seconds; stale data expires after fifteen seconds,
+Waiting rows show only a muted native pulse, with their own Attention group. Shells never appear
+inline: clicking the pulse opens a popup listing that agent's running shells, and clicking a shell
+follows its output in the existing viewer. The popup rescans every two seconds while open and says
+so when the last shell finishes. A workspace's shells with no agent to hold them get one
+"N background shells" line that opens the same popup. Reads/scans run every five seconds; stale data expires after fifteen seconds,
 read failures clear the associated data, and screen readings are invalidated by a
 status sequence change. This is a sidebar display state, not a new core status;
 built-in toasts, tabs and other mods still use the core status.
