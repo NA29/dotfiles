@@ -66,6 +66,20 @@ async function directory(path, on) {
   return out;
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
 export default class Files extends View {
   init(_props, cx) {
     this.saved = new Map();
@@ -182,8 +196,8 @@ export default class Files extends View {
       const entry = list[i], last = i === list.length - 1;
       const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
       const markColor = mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.working;
-      out.push(h_flex().id(`file-${path}`).h(ROW).flex_none().pl(6).pr(8).gap(6).items_center().rounded(7).cursor_pointer()
-        .hover(s => s.bg(tint(t.foreground, 0.05)))
+      out.push(h_flex().id(`file-${path}`).h(ROW).flex_none().pl(8).pr(10).gap(6).items_center().rounded(concentric(ISLAND_R(), 8)).cursor_pointer()
+        .hover(s => s.bg(t.hover))
         .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
         // Tree guides: a line for each open ancestor that has more below, then an elbow.
         .when(depth > 0, el => el.child(h_flex().flex_none().h_full().ml(-6)
@@ -192,10 +206,10 @@ export default class Files extends View {
           .child(div().w(STEP).h_full().flex_none().relative()
             .child(div().absolute().left(12).top(0).w(1).h(last ? ROW / 2 : ROW).bg(line))
             .child(div().absolute().left(12).top(ROW / 2).w(4).h(1).bg(line)))))
-        .child(entry.dir ? svg(`mods/sleek-files/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none().text_color(t.dim) : div().w(11).flex_none())
+        .child(entry.dir ? svg(`mods/sleek-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(11).flex_none())
         .child(svg(`mods/sleek-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(entry.dir ? t.muted : t.dim))
         .child(div().flex_1().min_w(0).truncate().text_color(mark ? markColor : entry.dir ? t.foreground : t.muted).child(entry.name))
-        .when(Boolean(mark), el => el.child(div().flex_none().font_family(MONO).text_size(10.5).text_color(markColor).child(mark))));
+        .when(Boolean(mark), el => el.child(div().flex_none().font_family(MONO).text_size(11).text_color(markColor).child(mark))));
       if (entry.dir && open) this.rows(path, depth + 1, out, t, depth > 0 ? [...guides, !last] : []);
     }
     return out;
@@ -203,22 +217,22 @@ export default class Files extends View {
 
   render(cx) {
     if (key() !== this.context?.key) this.refresh(cx);
-    const t = theme(), card = glass(t.background);
+    const t = theme(), card = glass(lift(t, 0.1));
     const where = this.file ?? this.root?.split(/[\\/]/).pop() ?? "";
     const changed = Object.keys(this.marks).filter((p) => p.startsWith(`${this.root}/`)).length;
     return v_flex().id("files").size_full().min_h(0).p(6).gap(6).font_family(SANS).text_color(t.foreground).text_size(13)
       // Header card: back (while previewing), title, where you are.
-      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(10).bg(card)
-        .when(Boolean(this.file), el => el.child(div().id("files-back").px(6).py(1).rounded(5).cursor_pointer().text_color(t.muted)
-          .hover(s => s.bg(tint(t.foreground, 0.06)).text_color(t.foreground))
-          .on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
+      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 6)).bg(card)
+        .when(Boolean(this.file), el => el.child(div().id("files-back").px(6).py(1).rounded(4).cursor_pointer().text_color(t.muted)
+          .hover(s => s.bg(t.hover).text_color(t.foreground))
+          .on_click((_e, cx) => { this.show(null); cx.notify(); }).child(svg("mods/workspace-chrome/chevron-left.svg").size(14))))
         .child(div().flex_none().font_semibold().child("Files"))
-        .when(!this.file && changed > 0, el => el.child(div().flex_none().px(6).rounded(4).bg(tint(t.working, 0.14)).font_family(MONO).text_size(10.5).text_color(t.working).child(`${changed} changed`)))
+        .when(!this.file && changed > 0, el => el.child(div().flex_none().px(6).rounded(4).bg(tint(t.working, 0.14)).font_family(MONO).text_size(11).text_color(t.working).child(`${changed} changed`)))
         .child(div().flex_1().min_w(0).truncate().text_right().font_family(MONO).text_size(11).text_color(t.dim).child(where)))
-      .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).rounded(10).bg(card).overflow_y_scrollbar().p(4).children(this.rows("", 0, [], t))
+      .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).rounded(concentric(ISLAND_R(), 6)).bg(card).overflow_y_scrollbar().p(2).children(this.rows("", 0, [], t))
         .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
-      .when(Boolean(this.file), el => el.child(div().flex_1().min_h(0).rounded(10).overflow_hidden().bg(card).p(4)
+      .when(Boolean(this.file), el => el.child(div().flex_1().min_h(0).rounded(concentric(ISLAND_R(), 6)).overflow_hidden().bg(card).p(4)
         .child(this.code ? Editor.new(this.code).size_full() : div().p(8).text_size(12).text_color(t.dim).child(this.fileError || "Loading file…"))));
   }
 }

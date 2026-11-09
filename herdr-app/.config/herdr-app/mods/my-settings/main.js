@@ -45,12 +45,13 @@ const DEFAULTS = {
   "background.gradient": ["#342d40", "#162a37", 145],
   "background.image": "backgrounds/gwen-wallpaper.jpg",
   "background.kind": "image",
+  "background.on": true,
   "background.solid": "#08070c",
   "background.source": "~/Pictures/Images/Wallpapers/gwen-lol-4k-wallpaper-uhdpaper.com-762@5@l.jpg",
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false, "look.style": "shell",
   "panes.header": true,
   "ping.thumbsUp": true,
   "sidebar.activity": true, "sidebar.usage": true, "sidebar.agentView": "workspaces",
@@ -63,7 +64,7 @@ const DEFAULTS = {
 
 const SECTIONS = [
   ["look", "Appearance", "palette", "Transparency, colours, corners and spacing"],
-  ["wallpaper", "Wallpaper", "image", "What shows behind the islands"],
+  ["wallpaper", "Wallpaper", "image", "What shows behind everything"],
   ["sidebar", "Sidebar", "sidebar", "Width, sections, activity and usage"],
   ["bars", "Bars", "bars", "Tab strip, pane headers and the status bar"],
   ["terminal", "Terminal", "terminal", "Font, size, padding and text rendering"],
@@ -76,7 +77,7 @@ const SECTIONS = [
 // colours. Dim wallpaper gradients/solids sit well behind dark islands.
 const ACCENT_SLOTS = [["Red", "ansi9"], ["Green", "ansi10"], ["Yellow", "ansi11"], ["Blue", "ansi12"], ["Magenta", "ansi13"], ["Cyan", "ansi14"]];
 // Theme names as people know them; anything else is title-cased from its file name.
-const THEME_NAMES = { "atom-one-dark": "One Dark", "rose-pine": "Rosé Pine", "rose-pine-moon": "Rosé Pine Moon",
+const THEME_NAMES = { "atom-one-dark": "One Dark", "github-light": "GitHub Light", "rose-pine-dawn": "Rosé Pine Dawn", "rose-pine": "Rosé Pine", "rose-pine-moon": "Rosé Pine Moon",
   "catppuccin-mocha": "Catppuccin Mocha", "catppuccin-macchiato": "Catppuccin Macchiato", "catppuccin-frappe": "Catppuccin Frappé",
   "tokyo-night": "Tokyo Night", "tokyo-night-storm": "Tokyo Night Storm", "github-dark": "GitHub Dark" };
 const themeName = (n) => THEME_NAMES[n] ?? n.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -123,6 +124,8 @@ function find(node, id) {
   return null;
 }
 
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class MySettings extends View {
   init(_props, cx) {
     this.section = props()?.section ?? localStorage.getItem("section") ?? "look";
@@ -253,17 +256,17 @@ export default class MySettings extends View {
   toggle(id, on, action) {
     const t = theme();
     return h_flex().id(id).w(36).h(20).flex_none().px(2).items_center().rounded(10).cursor_pointer()
-      .bg(on ? t.accent : tint(t.foreground, 0.14)).when(on, (el) => el.justify_end())
+      .bg(on ? t.accent : tint(t.foreground, 0.18)).when(on, (el) => el.justify_end())
       .on_click((_e, cx) => { action(!on, cx); cx.notify(); })
       .child(div().size(16).rounded(8).bg(on ? t.chrome : t.muted));
   }
 
   seg(id, options, current, pick) {
     const t = theme();
-    return h_flex().flex_none().p(3).gap(2).rounded(8).bg(tint(t.foreground, 0.06)).children(options.map(([value, label], i) => {
+    return h_flex().flex_none().p(3).gap(2).rounded(6).bg(tint(t.foreground, 0.06)).children(options.map(([value, label], i) => {
       const on = same(value, current);
-      return div().id(`${id}-${i}`).h(24).px(10).flex().items_center().rounded(6).font_family(SANS).text_size(12).cursor_pointer()
-        .when(on, (el) => el.bg(tint(t.accent, 0.16)).text_color(t.foreground))
+      return div().id(`${id}-${i}`).h(24).px(10).flex().items_center().rounded(3).font_family(SANS).text_size(12).cursor_pointer()
+        .when(on, (el) => el.bg(tint(t.accent, selA(t))).text_color(t.foreground))
         .when(!on, (el) => el.text_color(t.muted).hover((h) => h.text_color(t.foreground)))
         .on_click((_e, cx) => { pick(value, cx); cx.notify(); })
         .child(label);
@@ -283,9 +286,9 @@ export default class MySettings extends View {
 
   chip(id, label, on, action) {
     const t = theme();
-    return h_flex().id(id).h(28).px(10).gap(6).flex_none().items_center().rounded(8).border_1().cursor_pointer()
+    return h_flex().id(id).h(28).px(10).gap(6).flex_none().items_center().rounded(6).border_1().cursor_pointer()
       .font_family(SANS).text_size(12)
-      .when(on, (el) => el.bg(tint(t.accent, 0.12)).border_color(tint(t.accent, 0.45)).text_color(t.foreground))
+      .when(on, (el) => el.bg(tint(t.accent, selA(t))).border_color(tint(t.accent, 0.45)).text_color(t.foreground))
       .when(!on, (el) => el.border_color(t.border).text_color(t.muted).hover((h) => h.text_color(t.foreground).border_color(t.input ?? t.muted)))
       .on_click((_e, cx) => { action(!on, cx); cx.notify(); })
       .child(on ? svg(ICON("check")).size(12).text_color(t.accent) : div().size(12))
@@ -295,11 +298,11 @@ export default class MySettings extends View {
   button(id, label, icon, action, tone = null) {
     const t = theme();
     const color = tone ?? t.foreground;
-    return h_flex().id(id).h(28).px(10).gap(7).flex_none().items_center().rounded(8).cursor_pointer()
+    return h_flex().id(id).h(28).px(10).gap(8).flex_none().items_center().rounded(6).cursor_pointer()
       .bg(tint(t.foreground, 0.06)).font_family(SANS).text_size(12).text_color(color)
       .hover((h) => h.bg(tint(t.foreground, 0.11)))
       .on_click((_e, cx) => { action(cx); cx.notify(); })
-      .when(Boolean(icon), (el) => el.child(svg(ICON(icon)).size(13).text_color(color)))
+      .when(Boolean(icon), (el) => el.child(svg(ICON(icon)).size(14).text_color(color)))
       .child(label);
   }
 
@@ -309,7 +312,7 @@ export default class MySettings extends View {
     return h_flex().w_full().min_h(48).px(14).py(9).gap(16).items_center()
       .child(v_flex().flex_1().min_w(0).gap(2)
         .child(div().font_family(SANS).text_size(13).text_color(t.foreground).child(label))
-        .when(Boolean(hint), (el) => el.child(div().font_family(SANS).text_size(11.5).text_color(t.dim).child(hint))))
+        .when(Boolean(hint), (el) => el.child(div().font_family(SANS).text_size(12).text_color(t.dim).child(hint))))
       .when(Boolean(control), (el) => el.child(control));
   }
 
@@ -321,7 +324,7 @@ export default class MySettings extends View {
       .child(h_flex().px(4).items_center()
         .child(div().flex_1().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(title))
         .when(Boolean(aside), (el) => el.child(aside)))
-      .child(v_flex().w_full().rounded(10).bg(t.background).overflow_hidden()
+      .child(v_flex().w_full().rounded(6).bg(tint(t.foreground, 0.06)).overflow_hidden()
         .children(list.map((r, i) => i ? div().w_full().border_t(1).border_color(tint(t.foreground, 0.05)).child(r) : r)));
   }
 
@@ -337,13 +340,41 @@ export default class MySettings extends View {
     const px = (v) => `${Math.round(v)}px`;
     const themeNow = layout()?.theme;
     const current = typeof themeNow === "object" ? (settings().dark === false ? themeNow?.light : themeNow?.dark) : themeNow;
-    const shownThemes = themes().filter((th) => !th.light && th.name !== "win98");
+    const shownThemes = themes().filter((th) => th.name !== "win98").sort((a, b) => Number(a.light) - Number(b.light));
+    // The chosen theme of each kind: one is used in dark mode, the other in light mode.
+    const themeChip = (th) => {
+      const sel = th.name === (typeof themeNow === "object" ? (th.light ? themeNow?.light : themeNow?.dark) : themeNow);
+      const dots = [th.colors.background, th.colors.accent, th.colors.ansi1, th.colors.ansi2, th.colors.ansi4].filter(Boolean);
+      return h_flex().id(`theme-${th.name}`).h(32).px(10).gap(8).items_center().rounded(6).border_1().cursor_pointer()
+        .border_color(sel ? t.accent : t.border).when(sel, (el) => el.bg(tint(t.accent, selA(t))))
+        .hover((h) => h.border_color(sel ? t.accent : t.muted))
+        // A new theme brings its own accent (a picked one would clash with it).
+        .on_click((_e, cx) => {
+          run("app.theme", { name: th.name }); set({ "look.accent": null });
+          // A light theme only shows in light mode (and a dark one in dark): follow the pick.
+          if (th.light === (settings().dark !== false)) this.saveSettings(cx, (o) => { o.appearance = th.light ? "light" : "dark"; });
+          cx.notify();
+        })
+        .child(h_flex().gap(4).children(dots.map((d) => div().size(9).rounded(5).bg(d).border_1().border_color(tint("#ffffff", 0.12)))))
+        .child(div().font_family(SANS).text_size(12).text_color(sel ? t.foreground : t.muted).child(themeName(th.name)));
+    };
     return [
+      this.group("Style", [
+        this.row("Window style", "Focused: only the terminal is a raised panel. Islands: every section is its own panel.",
+          this.seg("style", [["shell", "Focused"], ["islands", "Islands"]], c["look.style"], (v) => {
+            set({ "look.style": v });
+            run("layout.resize", { id: "status", px: v === "islands" ? 34 : 26 });
+            run("layout.resize", { id: "sidebar-footer", px: v === "islands" ? 40 : 26 });
+            run("layout.resize", { id: "tabs", px: v === "islands" ? 40 : 36 });
+            run("layout.resize", { id: "brand", px: v === "islands" ? 46 : 42 });
+          })),
+      ]),
+
       this.group("Transparency", [
         this.row("See-through", "Let the wallpaper show through the sidebar, bars and panes. Ctrl+A t flips it.",
           this.toggle("tr-on", on, (v) => set({ "transparency.on": v }))),
-        this.row("Islands", "The sidebar, tab strip and status bar themselves.", this.slider("chrome", pct, !on)),
-        this.row("Cards", "What sits on the islands: workspace, activity and usage cards, tab pills, status-bar pills.", this.slider("cards", pct, !on)),
+        this.row("Frame", "The sidebar, tab strip and status bar.", this.slider("chrome", pct, !on)),
+        this.row("Cards", "Raised surfaces such as workspace rows, panel cards and pills.", this.slider("cards", pct, !on)),
         this.row("Panes", "Terminals and their title strips. Below 100% the wallpaper shows behind your text.", this.slider("panes", pct, !on)),
       ]),
 
@@ -362,18 +393,10 @@ export default class MySettings extends View {
                 .on_click((_e, cx) => { set({ "look.accent": value ? value.slice(0, 7) : null }); cx.notify(); });
             });
           })())),
-        this.row("Theme", null, null),
-        this.pad(h_flex().flex_wrap().gap(8).children(shownThemes.map((th) => {
-          const sel = th.name === current;
-          const dots = [th.colors.background, th.colors.accent, th.colors.ansi1, th.colors.ansi2, th.colors.ansi4].filter(Boolean);
-          return h_flex().id(`theme-${th.name}`).h(32).px(10).gap(8).items_center().rounded(8).border_1().cursor_pointer()
-            .border_color(sel ? t.accent : t.border).when(sel, (el) => el.bg(tint(t.accent, 0.1)))
-            .hover((h) => h.border_color(sel ? t.accent : t.muted))
-            // A new theme brings its own accent (a picked one would clash with it).
-            .on_click((_e, cx) => { run("app.theme", { name: th.name }); set({ "look.accent": null }); cx.notify(); })
-            .child(h_flex().gap(3).children(dots.map((d) => div().size(9).rounded(5).bg(d).border_1().border_color(tint("#ffffff", 0.12)))))
-            .child(div().font_family(SANS).text_size(12).text_color(sel ? t.foreground : t.muted).child(themeName(th.name)));
-        }))),
+        this.row("Dark themes", null, null),
+        this.pad(h_flex().flex_wrap().gap(8).children(shownThemes.filter((th) => !th.light).map(themeChip))),
+        this.row("Light themes", null, null),
+        this.pad(h_flex().flex_wrap().gap(8).children(shownThemes.filter((th) => th.light).map(themeChip))),
         this.row("Appearance", "Dark always, light always, or follow macOS.",
           this.seg("appearance", [["dark", "Dark"], ["light", "Light"], [null, "System"]], s.appearance ?? null,
             (v, cx) => this.saveSettings(cx, (o) => { if (v) o.appearance = v; else delete o.appearance; }))),
@@ -381,17 +404,22 @@ export default class MySettings extends View {
       this.group("Shape", [
         this.row("Square corners", "Everything square: islands, panes, cards, pills and menus.", this.toggle("square", c["look.square"], (v) => set({ "look.square": v }))),
         this.row("Corners", "Roundness of the islands and panes (when not square).", this.slider("radius", px)),
-        this.row("Gaps", "Space around and between the islands; more shows more wallpaper.", this.slider("gap", px)),
-        this.row("Borders", "A hairline around each island and pane.", this.toggle("borders", c["look.borders"], (v) => set({ "look.borders": v }))),
+        this.row("Gaps", "Space around and between the panels; more shows more wallpaper.", this.slider("gap", px)),
+        this.row("Borders", "A hairline around each panel and pane.", this.toggle("borders", c["look.borders"], (v) => set({ "look.borders": v }))),
         this.row("Focus ring", "Outline the focused pane in the accent colour.", this.toggle("focus", c["look.focusRing"], (v) => set({ "look.focusRing": v }))),
       ]),
     ];
   }
 
   wallpaper(t, c) {
+    const useWall = c["background.on"] !== false;
+    const master = this.group("Wallpaper", [
+      this.row("Use a wallpaper", "Off: the window background comes from your theme.", this.toggle("wall-on", useWall, (v) => set({ "background.on": v }))),
+    ]);
+    if (!useWall) return [master];
     const kind = c["background.kind"];
     const src = expand(c["background.source"]);
-    const tile = (id, w, h, sel, body, action, tip) => div().id(id).w(w).h(h).flex_none().rounded(10).p(2).cursor_pointer().tooltip(tip)
+    const tile = (id, w, h, sel, body, action, tip) => div().id(id).w(w).h(h).flex_none().rounded(6).p(2).cursor_pointer().tooltip(tip)
       .border_2().border_color(sel ? t.accent : "#00000000").hover((x) => x.border_color(sel ? t.accent : t.input ?? t.muted))
       .on_click((_e, cx) => { action(cx); cx.notify(); }).child(body);
     const walls = this.walls;
@@ -400,12 +428,13 @@ export default class MySettings extends View {
       : !walls.length
         ? div().py(24).w_full().flex().justify_center().font_family(SANS).text_size(12).text_color(t.dim).child("No images in this folder.")
         : h_flex().flex_wrap().gap(8).children(walls.map((w, i) => tile(`wall-${i}`, 184, 106, kind === "image" && w.src === src,
-          div().size_full().rounded(7).overflow_hidden().relative()
+          div().size_full().rounded(2).overflow_hidden().relative()
             .child(image(rel(w.thumb)).w(176).h(98))
             .when(this.wallBusy === w.src, (el) => el.child(div().absolute().inset_0().flex().items_center().justify_center()
-              .bg(tint("#000000", 0.55)).font_family(SANS).text_size(11.5).text_color("#ffffff").child("Applying…"))),
+              .bg(tint("#000000", 0.55)).font_family(SANS).text_size(12).text_color("#ffffff").child("Applying…"))),
           (cx) => this.useWall(w, cx), w.name)));
     return [
+      master,
       this.group("Image", [
         this.row("Folder", tilde(expand(c["wallpaper.folder"])),
           h_flex().gap(6)
@@ -420,22 +449,22 @@ export default class MySettings extends View {
         this.row("Fit", "Fill crops the image to the window; Fit shows all of it.",
           this.seg("fit", [["cover", "Fill"], ["contain", "Fit"]], c["background.fit"], (v) => set({ "background.fit": v }))),
         this.pad(grid),
-      ], kind === "image" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("in use") : null),
+      ], kind === "image" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("In use") : null),
       this.group("Gradient", [
         this.pad(h_flex().flex_wrap().gap(8).children(GRADIENTS.map(([name, g]) => tile(`grad-${name}`, 140, 70,
           kind === "gradient" && same(g, c["background.gradient"]),
-          div().size_full().rounded(7).overflow_hidden().relative()
+          div().size_full().rounded(2).overflow_hidden().relative()
             .child(h_flex().absolute().inset_0().children(Array.from({ length: 16 }, (_, i) => div().flex_1().h_full().bg(mix(g[0], g[1], i / 15)))))
             .child(div().absolute().left(8).bottom(6).font_family(SANS).text_size(11).text_color(tint("#ffffff", 0.75)).child(name)),
           () => set({ "background.kind": "gradient", "background.gradient": g }), name)))),
-      ], kind === "gradient" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("in use") : null),
+      ], kind === "gradient" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("In use") : null),
       this.group("Solid colour", [
         this.pad(h_flex().flex_wrap().gap(8).children(SOLIDS.map(([name, hex]) => tile(`solid-${name}`, 90, 56,
           kind === "solid" && c["background.solid"] === hex,
-          div().size_full().rounded(7).p(6).flex().items_end().bg(hex).border_1().border_color(t.border)
-            .font_family(SANS).text_size(10.5).text_color(t.dim).child(name),
+          div().size_full().rounded(2).p(6).flex().items_end().bg(hex).border_1().border_color(t.border)
+            .font_family(SANS).text_size(11).text_color(t.dim).child(name),
           () => set({ "background.kind": "solid", "background.solid": hex }), hex)))),
-      ], kind === "solid" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("in use") : null),
+      ], kind === "solid" ? div().font_family(SANS).text_size(11).text_color(t.accent).child("In use") : null),
     ];
   }
 
@@ -446,7 +475,7 @@ export default class MySettings extends View {
     return [
       this.group("Layout", [
         this.row("Width", "Cmd+B or the sidebar button folds it to a rail.", this.slider("sidebarW", px)),
-        this.row("Agent view", "Workspace cards, a flat list with workspace labels, or groups by attention.",
+        this.row("Agent view", "Grouped by workspace, one flat list, or grouped by what needs you.",
           this.seg("agent-view", [["workspaces", "Spaces"], ["agents", "Agents"], ["attention", "Attention"]], c["sidebar.agentView"], (v) => set({ "sidebar.agentView": v }))),
         this.row("Activity", "Recent agent events, under the workspaces.", this.toggle("sec-activity", c["sidebar.activity"], showSection("sidebar.activity", "activity"))),
         this.row("Usage", "5-hour and 7-day limits for Claude Code and Codex.", this.toggle("sec-usage", c["sidebar.usage"], showSection("sidebar.usage", "usage"))),
@@ -496,11 +525,11 @@ export default class MySettings extends View {
     const current = c["terminal.font"];
     const fontRow = (name, value, i) => {
       const sel = (current ?? null) === value;
-      return h_flex().id(`font-${i}`).w_full().h(32).px(10).gap(10).items_center().rounded(7).cursor_pointer()
-        .when(sel, (el) => el.bg(tint(t.accent, 0.14))).when(!sel, (el) => el.hover((h) => h.bg(tint(t.foreground, 0.04))))
+      return h_flex().id(`font-${i}`).w_full().h(32).px(10).gap(10).items_center().rounded(4).cursor_pointer()
+        .when(sel, (el) => el.bg(tint(t.accent, selA(t)))).when(!sel, (el) => el.hover((h) => h.bg(t.hover)))
         .on_click((_e, cx) => { set({ "terminal.font": value }); cx.notify(); })
-        .child(div().w(14).flex_none().when(sel, (el) => el.child(svg(ICON("check")).size(13).text_color(t.accent))))
-        .child(div().w(200).flex_none().truncate().font_family(SANS).text_size(12.5).text_color(sel ? t.foreground : t.muted).child(name))
+        .child(div().w(14).flex_none().when(sel, (el) => el.child(svg(ICON("check")).size(14).text_color(t.accent))))
+        .child(div().w(200).flex_none().truncate().font_family(SANS).text_size(13).text_color(sel ? t.foreground : t.muted).child(name))
         .child(div().flex_1().min_w(0).truncate().font_family(value ?? "JetBrains Mono").text_size(13).text_color(t.foreground).child("fn main() { 0O 1lI => {} }"));
     };
     return [
@@ -535,16 +564,16 @@ export default class MySettings extends View {
       const item = (id, name, it, sub) => {
         const sel = (it?.path ?? null) === cur;
         const busy = it?.src && this.soundBusy === it.src;
-        return h_flex().id(`${which}-${id}`).w_full().h(30).px(8).gap(8).items_center().rounded(7).cursor_pointer()
-          .when(sel, (el) => el.bg(tint(t.accent, 0.14))).when(!sel, (el) => el.hover((h) => h.bg(tint(t.foreground, 0.04))))
+        return h_flex().id(`${which}-${id}`).w_full().h(30).px(8).gap(8).items_center().rounded(4).cursor_pointer()
+          .when(sel, (el) => el.bg(tint(t.accent, selA(t)))).when(!sel, (el) => el.hover((h) => h.bg(t.hover)))
           .on_click((_e, cx) => { this.pickSound(which, it, cx); cx.notify(); })
-          .child(div().id(`${which}-${id}-play`).size(22).flex_none().flex().items_center().justify_center().rounded(6)
-            .text_color(t.dim).hover((h) => h.bg(tint(t.foreground, 0.08)).text_color(t.foreground)).tooltip("Preview")
+          .child(div().id(`${which}-${id}-play`).size(22).flex_none().flex().items_center().justify_center().rounded(4)
+            .text_color(t.dim).hover((h) => h.bg(t.hover).text_color(t.foreground)).tooltip("Preview")
             .on_click((_e, cx) => { cx.stop_propagation(); this.preview(it ?? { path: which }, cx); })
             .child(svg(ICON("play")).size(10)))
-          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12.5).text_color(sel ? t.foreground : t.muted).child(busy ? "Converting…" : name))
-          .when(Boolean(sub), (el) => el.child(div().flex_none().font_family(SANS).text_size(10.5).text_color(t.dim).child(sub)))
-          .when(sel, (el) => el.child(svg(ICON("check")).size(13).flex_none().text_color(t.accent)));
+          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).text_color(sel ? t.foreground : t.muted).child(busy ? "Converting…" : name))
+          .when(Boolean(sub), (el) => el.child(div().flex_none().font_family(SANS).text_size(11).text_color(t.dim).child(sub)))
+          .when(sel, (el) => el.child(svg(ICON("check")).size(14).flex_none().text_color(t.accent)));
       };
       return v_flex().id(`snd-${which}`).flex_1().min_w(0).h(300).overflow_y_scrollbar().gap(1)
         .child(item("default", "Herdr default", null, "built in"))
@@ -556,7 +585,7 @@ export default class MySettings extends View {
       this.group("Alerts", [
         this.row("Play sounds", "When an agent finishes while you're elsewhere, or needs you.",
           this.toggle("snd-on", snd.enabled !== false, (v, cx) => this.saveSettings(cx, (o) => { o.sounds = { ...(o.sounds ?? {}), enabled: v }; }))),
-        this.row("Thumbs-up", "Pop the thumbs-up beside Claude Code's note when it finishes or needs you.",
+        this.row("Thumbs-up", "Pop the thumbs-up beside an agent's note when it finishes or needs you.",
           this.toggle("ping-thumbs", c["ping.thumbsUp"], (v) => set({ "ping.thumbsUp": v }))),
         this.pad(h_flex().w_full().gap(12).items_start()
           .child(v_flex().flex_1().min_w(0).child(head("Agent finished")).child(list("done")))
@@ -571,12 +600,12 @@ export default class MySettings extends View {
   }
 
   keys(t, c) {
-    const cap = (k) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(5)
-      .bg(tint(t.foreground, 0.07)).font_family(MONO).text_size(10.5).text_color(t.muted).child(k);
+    const cap = (k) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(4)
+      .bg(tint(t.foreground, 0.12)).font_family(MONO).text_size(11).text_color(t.muted).child(k);
     const P = { "ctrl-a": "⌃A", "ctrl-b": "⌃B", "ctrl-space": "⌃␣" }[c["keys.prefix"]];
     const tip = (keysText, what) => h_flex().h(28).gap(10).items_center()
       .child(h_flex().w(96).flex_none().gap(4).children(keysText.map(cap)))
-      .child(div().font_family(SANS).text_size(12.5).text_color(t.muted).child(what));
+      .child(div().font_family(SANS).text_size(13).text_color(t.muted).child(what));
     return [
       this.group("Prefix", [
         this.row("Prefix key", "Opens the tmux-style key menu. Press it twice to send it to the program.",
@@ -607,7 +636,7 @@ export default class MySettings extends View {
     return [
       this.group("Window", [
         this.row("Layout", "Cmd+Shift+L cycles them.",
-          this.seg("layout", layouts().filter((n) => n.startsWith("my-")).map((n) => [n, n.replace(/^my-/, "")]), shown, (v) => run("layout.switch", { name: v }))),
+          this.seg("layout", layouts().filter((n) => n.startsWith("my-") || n === "na29-islands").map((n) => { const s = n.replace(/^(my-|na29-)/, ""); return [n, s.charAt(0).toUpperCase() + s.slice(1)]; }), shown, (v) => run("layout.switch", { name: v }))),
         this.row("Zoom", "Scales everything; Cmd+= and Cmd+- too.", this.slider("zoom", (v) => `${Math.round(v * 100)}%`)),
       ]),
       this.group("Herdr", [
@@ -644,42 +673,42 @@ export default class MySettings extends View {
       bars: () => this.bars(t, c), terminal: () => this.terminal(t, c, s), sounds: () => this.sounds(t, s, c),
       keys: () => this.keys(t, c), general: () => this.general(t, s) }[id]();
 
-    const nav = v_flex().w(210).h_full().flex_none().p(10).gap(2)
-      .child(h_flex().h(40).px(10).mb(6).gap(9).items_center()
+    const nav = v_flex().w(210).h_full().flex_none().p(5).gap(2)
+      .child(h_flex().h(40).px(15).mb(6).gap(8).items_center()
         .child(svg(ICON("settings")).size(16).text_color(t.accent))
-        .child(div().font_family(SANS).text_size(14.5).font_semibold().text_color(t.foreground).child("Settings")))
+        .child(div().font_family(SANS).text_size(14).font_semibold().text_color(t.foreground).child("Settings")))
       .children(SECTIONS.map(([key, label, icon]) => {
         const on = key === id;
-        return h_flex().id(`nav-${key}`).h(34).px(10).gap(10).items_center().rounded(8).cursor_pointer()
+        return h_flex().id(`nav-${key}`).h(34).px(15).gap(10).items_center().rounded(6).cursor_pointer()
           .font_family(SANS).text_size(13)
-          .when(on, (el) => el.bg(tint(t.accent, 0.14)).text_color(t.foreground))
-          .when(!on, (el) => el.text_color(t.muted).hover((h) => h.bg(tint(t.foreground, 0.04)).text_color(t.foreground)))
+          .when(on, (el) => el.bg(tint(t.accent, selA(t))).text_color(t.foreground))
+          .when(!on, (el) => el.text_color(t.muted).hover((h) => h.bg(t.hover).text_color(t.foreground)))
           .on_click((_e, cx) => { this.section = key; localStorage.setItem("section", key); this.confirmReset = false; cx.notify(); })
-          .child(svg(ICON(icon)).size(15).text_color(on ? t.accent : t.dim))
+          .child(svg(ICON(icon)).size(16).text_color(on ? t.accent : t.dim))
           .child(label);
       }))
       .child(div().flex_1())
-      .child(h_flex().id("nav-herdr").h(32).px(10).gap(10).items_center().rounded(8).cursor_pointer()
+      .child(h_flex().id("nav-herdr").h(32).px(15).gap(10).items_center().rounded(6).cursor_pointer()
         .font_family(SANS).text_size(12).text_color(t.dim).hover((h) => h.bg(t.hover).text_color(t.foreground))
         .on_click(() => { this.close(); run("app.settings"); })
-        .child(svg(ICON("external")).size(13)).child("Herdr settings"))
-      .child(div().px(10).pt(4).font_family(MONO).text_size(10.5).text_color(tint(t.dim, 0.8)).child("saved to rice.json"));
+        .child(svg(ICON("external")).size(14)).child("Herdr settings"))
+      .child(div().px(15).pt(4).font_family(MONO).text_size(11).text_color(tint(t.dim, 0.8)).child("saved to rice.json"));
 
     const content = v_flex().flex_1().min_w(0).h_full()
-      .child(h_flex().h(60).flex_none().mt(10).mr(10).px(18).gap(12).items_center().rounded(10).bg(t.background)
+      .child(h_flex().h(60).flex_none().mt(5).ml(8).mr(5).px(18).gap(12).items_center().rounded(6).bg(tint(t.foreground, 0.06))
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(div().font_family(SANS).text_size(16).font_semibold().text_color(t.foreground).child(title))
           .child(div().font_family(SANS).text_size(12).text_color(t.dim).child(about)))
-        .child(div().id("close").size(28).flex_none().flex().items_center().justify_center().rounded(7).cursor_pointer()
+        .child(div().id("close").size(28).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
           .text_color(t.dim).hover((h) => h.bg(t.hover).text_color(t.foreground)).tooltip("Close (esc)")
-          .on_click(() => this.close()).child(svg(ICON("x")).size(15))))
-      .when(Boolean(this.message), (el) => el.child(h_flex().id("msg").ml(8).mr(10).mt(14).px(12).py(8).gap(10).items_center().rounded(8)
+          .on_click(() => this.close()).child(svg(ICON("x")).size(16))))
+      .when(Boolean(this.message), (el) => el.child(h_flex().id("msg").ml(8).mr(5).mt(14).px(12).py(8).gap(10).items_center().rounded(6)
         .bg(tint(t.working, 0.12)).font_family(SANS).text_size(12).text_color(t.foreground)
         .child(div().flex_1().child(this.message))
         .child(div().id("msg-x").cursor_pointer().text_color(t.dim).on_click((_e, cx) => { this.message = null; cx.notify(); }).child(svg(ICON("x")).size(12)))))
-      .child(v_flex().id(`body-${id}`).flex_1().min_h(0).overflow_y_scrollbar().pl(8).pr(10).pt(18).pb(28).gap(22).children(body));
+      .child(v_flex().id(`body-${id}`).flex_1().min_h(0).overflow_y_scrollbar().pl(8).pr(5).pt(18).pb(28).gap(22).children(body));
 
-    return h_flex().id("my-settings").size_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
+    return h_flex().id("my-settings").size_full().rounded(12).border_1().border_color(t.border).overflow_hidden()
       .bg(t.chrome).text_color(t.foreground)
       .child(nav).child(content);
   }

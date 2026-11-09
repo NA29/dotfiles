@@ -51,6 +51,22 @@ function toggleSidebar() {
   run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+const FOCUSED = () => (sqShared("rice") ?? {})["look.style"] !== "islands";
+
 export default class WorkspaceChrome extends View {
   button(id, label, action) {
     const t = theme();
@@ -63,25 +79,26 @@ export default class WorkspaceChrome extends View {
     if (props()?.footer) {
       // Sleek: filled pills in the card colour, like the tab pills and status-bar pills;
       // half the width each, lined up with the cards above. Icons only on the rail.
-      const chip = (id, icon, label, tip, action) => h_flex().id(id).h(28).px(collapsed ? 7 : 10).gap(7).items_center().justify_center()
-        .when(!collapsed, el => el.flex_1().min_w(0))
-        .rounded(8).bg(glass(t.background)).text_color(t.muted).cursor_pointer().tooltip(tip)
-        .hover(s => s.bg(glass(t.selected)).text_color(t.foreground))
-        .on_click(action).child(svg(`mods/sleek-chrome/${icon}.svg`).size(13).flex_none())
+      const chip = (id, icon, label, tip, action) => h_flex().id(id).h(FOCUSED() ? 24 : 28).px(collapsed ? 7 : FOCUSED() ? 14 : 10).gap(8).items_center().justify_center()
+        .when(!collapsed && !FOCUSED(), el => el.flex_1().min_w(0))
+        .rounded(concentric(ISLAND_R(), 6)).when(!FOCUSED(), (el) => el.bg(glass(lift(t, 0.13)))).text_color(t.muted).cursor_pointer().tooltip(tip)
+        .hover(s => s.bg(FOCUSED() ? t.hover : glass(lift(t, 0.2))).text_color(t.foreground))
+        .on_click(action).child(svg(`mods/sleek-chrome/${icon}.svg`).size(14).flex_none())
         .when(!collapsed, el => el.child(div().truncate().font_family(SANS).child(label)));
-      return h_flex().size_full().px(8).gap(6).items_center()
+      return h_flex().size_full().px(6).gap(6).items_center()
         .text_size(12)
+        .when(!collapsed && FOCUSED(), el => el.justify_between())
         .when(collapsed, el => el.px(6).gap(4).justify_center())
         .child(chip("settings", "settings", "Settings", "Settings (Cmd+,)", () => run("mod.open", { name: "my-settings" }))
           // An update is ready: a small dot, like before.
           .when(Boolean(updates().app.ready), el => el.child(div().size(5).rounded_full().bg(t.done))))
-        .child(chip("machine", "plus", "Add machine", "Add a machine", () => run("mod.open", { name: "machine-add" })));
+        .when(!collapsed, el => el.child(chip("machine", "plus", "Add machine", "Add a machine", () => run("mod.open", { name: "machine-add" }))));
     }
-    return h_flex().size_full().pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
+    return h_flex().w_full().h(FOCUSED() ? 36 : 46).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(14)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
       .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(image("frame/welcome/herdr.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr"))))
-      .when(!collapsed, el => el.child(this.button("search", svg("mods/sleek-chrome/search.svg").size(15), () => run("mod.open", { name: "my-goto" }))))
+      .when(!collapsed, el => el.child(this.button("search", svg("mods/sleek-chrome/search.svg").size(16), () => run("mod.open", { name: "my-goto" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
-      .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/sleek-chrome/sidebar.svg").size(15), toggleSidebar)));
+      .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/sleek-chrome/sidebar.svg").size(16), toggleSidebar)));
   }
 }

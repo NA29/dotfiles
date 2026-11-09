@@ -37,8 +37,8 @@ import { WEEK, readings, untilText } from "./model.js";
 import { dashboard } from "./dashboard.js";
 
 const PROVIDERS = [
-  { id: "claude", name: "claude code", app: "claude-code", icon: "icons/claude.svg" },
-  { id: "codex", name: "codex", app: "codex", icon: "icons/codex.svg" },
+  { id: "claude", name: "Claude Code", app: "claude-code", icon: "icons/claude.svg" },
+  { id: "codex", name: "Codex", app: "codex", icon: "icons/codex.svg" },
 ];
 
 function find(node, id) {
@@ -49,6 +49,20 @@ function find(node, id) {
   }
   return null;
 }
+
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
 
 export default class Usage extends View {
   init(_props, cx) {
@@ -129,7 +143,7 @@ export default class Usage extends View {
   fit() {
     if (this.detail) return;
     const n = R("sidebar.usage", true) === false ? 0 : this.shown(Math.floor(Date.now() / 1000)).length;
-    const px = !n ? 0 : this.narrow ? 8 + 8 + n * 24 + 4 : this.folded ? 34 : 44 + n * 62;
+    const px = !n ? 0 : this.narrow ? 1 : this.folded ? 34 : 44 + n * 62;
     const node = find(layout(), "usage");
     if (node && node.size?.px !== px) run(px ? "layout.show" : "layout.hide", { id: "usage" });
     if (node && px && node.size?.px !== px) run("layout.resize", { id: "usage", px });
@@ -153,10 +167,10 @@ export default class Usage extends View {
     const d = p.data;
     const age = d?.at ? now - d.at : null;
     const pic = p.icon ? image(p.icon).w(13).h(13).flex_none() : null;
-    return v_flex().id(`usage-provider-${p.id}`).px(10).py(3).gap(1).rounded(7).cursor_pointer()
+    return v_flex().id(`usage-provider-${p.id}`).px(14).py(3).gap(1).rounded(concentric(SECTION_R(), 0)).cursor_pointer()
       .hover(h => h.bg(t.hover)).tooltip("Open detailed usage")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(p.id); }).when(!p.live, (el) => el.opacity(0.62))
-      .child(h_flex().h(20).gap(7).items_center()
+      .child(h_flex().h(20).gap(8).items_center()
         .when(Boolean(pic), (el) => el.child(pic))
         .child(div().font_family(SANS).text_color(t.foreground).font_semibold().child(p.name))
         .when(p.live, (el) => el.child(div().size(6).rounded(3).bg(t.done)))
@@ -185,7 +199,7 @@ export default class Usage extends View {
     // Folded: one line with each agent's 5-hour use, colored like its bar.
     const summary = list.map((p) => {
       const used = p.data?.five?.expired ? null : p.data?.five?.used;
-      const color = used == null ? t.dim : used >= 85 ? t.blocked : used >= 60 ? t.working : t.ansi4;
+      const color = used == null ? t.dim : used >= 85 ? t.blocked : used >= 60 ? t.working : t.muted;
       return h_flex().id(`usage-summary-${p.id}`).gap(4).flex_none().cursor_pointer()
         .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(p.id); })
         .child(div().font_family(SANS).text_color(t.dim).child(p.name.split(" ")[0]))
@@ -195,23 +209,14 @@ export default class Usage extends View {
       if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; this.fit(); cx.notify(); }
     });
     // Narrow sidebar: each agent's icon and 5-hour use, colored like its bar.
-    if (this.narrow) {
-      return watch(v_flex().id("root").size_full().min_h(0).px(6).pt(8).font_family(MONO()).text_size(10.5))
-        .child(v_flex().id("usage-rail").w_full().py(4).rounded(10).bg(glass(t.background)).tooltip("Open detailed usage").cursor_pointer().on_click(() => this.openDetails(this.shown(now)[0]?.id))
-          .children(list.map((p) => {
-            const used = p.data?.five?.expired ? null : p.data?.five?.used;
-            const pic = p.icon ? image(p.icon).w(12).h(12).flex_none() : null;
-            return h_flex().h(24).gap(5).items_center().justify_center().when(!p.live, (el) => el.opacity(0.62))
-              .when(Boolean(pic), (el) => el.child(pic))
-              .child(div().text_color(used == null ? t.dim : pctColor(t, used)).child(used == null ? "—" : `${Math.round(used)}%`));
-          })));
-    }
+    // Folded sidebar: only navigation stays. Usage is back as soon as it expands.
+    if (this.narrow) return watch(div().id("root").size_full());
     return watch(v_flex().id("root").size_full().min_h(0).font_family(MONO()).text_size(11))
       .child(box(t, {
         id: "usage", title: "usage", open, onToggle: toggle, summary,
         extra: [div().id("usage-open-details").font_family(SANS).text_size(11).cursor_pointer()
           .text_color(t.dim).hover(h => h.text_color(t.foreground)).tooltip("Open usage · prefix U")
-          .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(); }).child("details ↗")],
+          .on_click((_e, cx) => { cx.stop_propagation(); this.openDetails(); }).child("Details")],
         body: v_flex().children(list.map((p) => this.provider(t, p, now))),
       }));
   }

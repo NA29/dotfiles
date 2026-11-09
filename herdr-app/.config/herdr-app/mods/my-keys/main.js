@@ -16,7 +16,7 @@
 //   keys.json             prefix key, Ctrl+H/J/K/L, Cmd+N, Cmd+,
 
 import { View, div } from "gpui-kit";
-import { appHome, focused, hc, nextCommand, openOverlay, readTextFile, run, setShared, shared, spaces, theme, writeTextFile } from "herdr";
+import { appHome, focused, hc, nextCommand, openOverlay, panes, readTextFile, run, setShared, shared, spaces, theme, writeTextFile } from "herdr";
 
 const KEY = { left: "ctrl+h", down: "ctrl+j", up: "ctrl+k", right: "ctrl+l" };
 const LAYOUT = "na29-islands";
@@ -28,7 +28,9 @@ const CHROME = "#16141f";
 const CARD = "#191724";
 const hex6 = (c) => /^#[0-9a-f]{6}/i.test(c ?? "") ? c.slice(0, 7) : null;
 // What of the theme the look depends on: a theme switch rewrites the islands and panes.
-const themeSig = () => { const t = theme(); return `${t.chrome}|${t.background}`; };
+// Is the shown tab split? The focus border only means something when there is more than one pane.
+const isSplit = () => { const f = focused(); const tab = f?.tab?.id ?? f?.tab; return Boolean(tab) && panes().filter((p) => p.tab === tab).length > 1; };
+const themeSig = () => { const t = theme(); return `${t.chrome}|${t.background}|${isSplit()}`; };
 
 // Same as my-settings' DEFAULTS (mods can't import from each other's folders): what a missing
 // key means, so a partial rice.json or shared object never writes a half-empty look.
@@ -41,12 +43,13 @@ const DEFAULTS = {
   "background.gradient": ["#342d40", "#162a37", 145],
   "background.image": "backgrounds/gwen-wallpaper.jpg",
   "background.kind": "image",
+  "background.on": true,
   "background.solid": "#08070c",
   "background.source": "~/Pictures/Images/Wallpapers/gwen-lol-4k-wallpaper-uhdpaper.com-762@5@l.jpg",
   "bar.agents": true, "bar.battery": true, "bar.clock24": true, "bar.cpu": true, "bar.date": true,
   "bar.memory": true, "bar.music": true, "bar.musicControls": true, "bar.time": true, "bar.wispr": true,
   "keys.hjkl": true, "keys.namedSpaces": true, "keys.prefix": "ctrl-a", "keys.repeatMs": 500, "keys.settingsPanel": true,
-  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false,
+  "look.accent": null, "look.borders": true, "look.focusRing": true, "look.gap": 6, "look.radius": 10, "look.square": false, "look.style": "shell",
   "panes.header": true,
   "ping.thumbsUp": true,
   "sidebar.activity": true, "sidebar.usage": true, "sidebar.agentView": "workspaces",
@@ -60,7 +63,7 @@ const full = () => ({ ...DEFAULTS, ...(shared("rice") ?? {}) });
 
 function newSpace() {
   const here = spaces().find((s) => s.id === focused()?.space);
-  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 210,
+  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 192, frame: "none",
     props: { title: "New space", command: { name: "space.new", args: { machine: here?.machine ?? "" } } } });
 }
 
@@ -84,6 +87,17 @@ function find(node, id) {
 const alpha = (pct) => Math.round((Math.max(0, Math.min(100, pct)) / 100) * 255).toString(16).padStart(2, "0");
 const pick = (r, prefixes) => JSON.stringify(Object.keys(r).filter((k) => prefixes.some((p) => k.startsWith(p))).sort().map((k) => [k, r[k]]));
 
+// WCAG contrast of a chrome-to-text blend against a raised card (chrome blended 15% toward text).
+function readableInks(chrome, fg) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lum = (c) => { const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const blend = (k) => rgb(chrome).map((v, i) => v + (rgb(fg)[i] - v) * k);
+  const hex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  const card = lum(blend(0.15));
+  const solve = (target) => { for (let k = 0.3; k < 1; k += 0.01) { const l = lum(blend(k)); if ((Math.max(l, card) + 0.05) / (Math.min(l, card) + 0.05) >= target) return hex(blend(k)); } return hex(blend(1)); };
+  return { dim: solve(4.5), muted: solve(6) };
+}
+
 // The look, written into the layout tree.
 function applyLook(root, r) {
   const on = r["transparency.on"] !== false;
@@ -94,10 +108,19 @@ function applyLook(root, r) {
   const radius = r["look.square"] ? 0 : r["look.radius"] ?? 10;
   const borders = r["look.borders"] !== false;
   const border = { width: 1, color: "border" };
+  const focusedStyle = r["look.style"] !== "islands";   // Focused: only the terminal is a card
+  // The window buttons stay centred on the top bar, which is 36px in Focused and 40px in Islands.
+  if (root.traffic_lights) root.traffic_lights = [root.traffic_lights[0], focusedStyle ? 18 : 20];
 
   const kind = r["background.kind"] ?? "image";
+  const light = parseInt(chrome.slice(1, 3), 16) > 128;
+  const mixHex = (a, b, k) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("");
   const [g1, g2, angle] = r["background.gradient"] ?? ["#342d40", "#162a37", 145];
-  if (kind === "image" && r["background.image"]) root.background = { image: r["background.image"], fit: r["background.fit"] ?? "cover" };
+  const wall = r["background.on"] !== false;
+  // Light themes get their own soft backdrop: the dark solid and gradient presets and the black dim veil don't apply.
+  if (light && (!wall || kind !== "image")) root.background = mixHex(chrome, hex6(t.foreground) ?? "#000000", 0.07);
+  else if (!wall) root.background = "canvas";   // no wallpaper: the theme decides
+  else if (kind === "image" && r["background.image"]) root.background = { image: r["background.image"], fit: r["background.fit"] ?? "cover" };
   else if (kind === "gradient" || kind === "image") root.background = { gradient: [g1, g2], angle };
   else root.background = r["background.solid"] ?? "#08070c";
 
@@ -109,11 +132,16 @@ function applyLook(root, r) {
   if (frame !== root) {
     root.padding = 0;
     root.gap = 0;
-    const dim = r["background.dim"] ?? 0;
-    if (dim > 0) frame.background = "#000000" + alpha(dim); else delete frame.background;
+    const dim = wall && !light ? r["background.dim"] ?? 0 : 0;
+    if (focusedStyle) frame.background = chrome + alpha(Math.max(chromePct, dim));   // the surface everything but the terminal sits on
+    else if (dim > 0) frame.background = "#000000" + alpha(dim); else delete frame.background;
   }
   // An accent you picked overrides the theme's; none (null) shows the theme's own.
   root.colors = { ...(root.colors ?? {}) };
+  // The two secondary text greys, solved per theme so they stay readable on a raised card, light or dark.
+  const ink = readableInks(hex6(t.chrome) ?? CHROME, hex6(t.foreground) ?? "#e0def4");
+  root.colors.muted = ink.muted; root.colors.dim = ink.dim;
+  root.colors.popover = chrome;   // Herdr's own menus sit on the same surface as every other menu
   if (r["look.accent"]) root.colors.accent = r["look.accent"]; else delete root.colors.accent;
   if (!Object.keys(root.colors).length) delete root.colors;
   const pad = r["terminal.padding"] ?? 14;
@@ -124,9 +152,13 @@ function applyLook(root, r) {
   for (const id of ["sidebar", "tabs", "status", "panel"]) {
     const n = find(root, id);
     if (!n) continue;
-    n.background = chromePct >= 100 ? "chrome" : chrome + alpha(chromePct);
+    // Focused: the sidebar and bars have no surface of their own. Islands: each is a panel.
+    if (focusedStyle) { delete n.background; delete n.border; }
+    else {
+      n.background = chromePct >= 100 ? "chrome" : chrome + alpha(chromePct);
+      if (borders) n.border = border; else delete n.border;
+    }
     n.radius = radius;
-    if (borders) n.border = border; else delete n.border;
   }
   const body = find(root, "work-body");
   if (body) { body.padding = [gap, 0]; body.gap = gap; }
@@ -142,7 +174,7 @@ function applyLook(root, r) {
   for (const id of ["spaces", "activity", "usage"]) {
     const n = find(root, id);
     if (!n) continue;
-    n.background = veil;
+    delete n.background; delete n.border;   // no section card: content sits on the island
     n.radius = Math.max(0, radius - gap);   // nested corners: inner = outer − inset
   }
 
@@ -151,14 +183,15 @@ function applyLook(root, r) {
     pane.radius = radius;
     pane.gap = gap;              // between split panes: same as between the islands
     if (borders) pane.border = border; else delete pane.border;
-    if (r["look.focusRing"] !== false) pane.focus = { width: 1, color: "accent" };
+    if (r["look.focusRing"] !== false && (!focusedStyle || isSplit())) pane.focus = { width: 1, color: "accent" };
     else if (borders) pane.focus = border; else delete pane.focus;
     if (r["panes.header"] === false) delete pane.header;
     else pane.header = { content: { mod: "sleek-pane" }, reveal: "always", height: 30, position: "top" };
     // See-through panes: the frame carries the tint and the terminal paints no background
     // of its own, so the header strip and the terminal are equally see-through.
-    if (panePct < 100) { pane.background = card + alpha(panePct); root.terminal_opacity = 0; }
-    else { pane.background = "background"; delete root.terminal_opacity; }
+    // Opaque too: a terminal's own background is square and would poke out past the rounded corners.
+    pane.background = panePct < 100 ? card + alpha(panePct) : "background";
+    root.terminal_opacity = 0;
   }
   return root;
 }
