@@ -614,8 +614,8 @@ export default class Spaces extends View {
 
   // Opens a shell's output, following it live, over the current tab.
   async peekJob(job) {
-    // One viewer at a time: closing a peek can leave its tail running.
-    for (const old of terminals()) if (old.labels?.["sleek.job-viewer"] && old.state === "live") hc(["kill", old.address]).catch(() => {});
+    // One viewer at a time: closing a peek leaves its tail running. One kept as a tab is yours.
+    for (const old of terminals()) if (old.labels?.["sleek.job-viewer"] && !old.labels["herdr.tab"] && !old.keep && old.state === "live") hc(["kill", old.address]).catch(() => {});
     const r = await hc(["run", "--bg", "--no-parent", "--no-notify", "--rm", "--json", "--label", "sleek.job-viewer=1", "--", "tail", "-n", "200", "-f", job.log]);
     if (r.code !== 0) return;
     const terminal = JSON.parse(r.stdout).address;
