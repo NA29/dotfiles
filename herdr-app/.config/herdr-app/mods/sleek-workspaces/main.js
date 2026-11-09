@@ -1075,7 +1075,7 @@ export default class Spaces extends View {
       for (const group of attentionGroups(rows)) {
         // A heading starts on the panel title's edge, outdented from its rows, so the eye can run
         // down the labels. It's styled as a label too, so agents lead. Its mark sits with the count.
-        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 20 : 0).px(14).gap(8).items_center().flex_none()
+        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 16 : 6).px(14).gap(8).items_center().flex_none()
           .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
           .when(["blocked", "done", "working"].includes(group.status), el => el.child(this.agentStatus(t, group.status)))
           .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
