@@ -9,7 +9,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, exec, home, readTextFile, run, theme, layout, shared, setShared, props, appHome, openOverlay, closeOverlay } from "herdr";
+import { settings, agents, exec, home, readTextFile, run, theme, layout, shared, setShared, props, appHome, openOverlay, closeOverlay } from "herdr";
 
 // Personal settings (my-settings panel): which providers, and when they show.
 const R = (k, d) => (shared("rice") ?? {})[k] ?? d;
@@ -206,7 +206,8 @@ export default class Usage extends View {
         .child(div().text_color(color).child(used == null ? "—" : `${Math.round(used)}%`));
     });
     const watch = (el) => el.on_size_change((size, cx) => {
-      if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; this.fit(); cx.notify(); }
+      const small = size.width / settings().zoom < 140;
+      if (small !== this.narrow) { this.narrow = small; this.fit(); cx.notify(); }
     });
     // Narrow sidebar: each agent's icon and 5-hour use, colored like its bar.
     // Folded sidebar: only navigation stays. Usage is back as soon as it expands.

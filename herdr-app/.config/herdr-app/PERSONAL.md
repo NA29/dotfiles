@@ -78,6 +78,7 @@ then commit.
 - Agents and Attention views: two-line 42px rows: title with status or age on the first line, the workspace's coloured number and name on the second. Above them is one dropdown line: the current workspace in full, every workspace by name on click. Attention headings match workspace headings and rows don't repeat their group's status.
 - Style (Settings > Appearance, rice `look.style`): `shell` = Focused (sidebar and bars have no surface, only the terminal is a card, accent border only when the tab is split, text-only 26px status bar, 26px sidebar footer, 36px top bar and 42px brand row with the window buttons at y 18); `islands` = every section a panel (34px status bar with pills and meters, 40px footer, 40px top bar, 46px brand row, window buttons at y 20). The sleek mods branch on `FOCUSED()`.
 - Folded sidebar (rail): one centred column only: expand, new space, workspace numbers (selected row wash, small status dot), Settings. Activity and Usage collapse to nothing until it expands.
+- Resizing has hard stops and no in-between states. Sidebar: full (drag 232-480, floor is where the header, footer and Usage all still fit) or rail (fixed 52, as wide as its tiles; sleek-tabs clears the traffic lights, so the first tab starts right of the terminal's edge there; not draggable, reached only by its toggle). `setRail` in sleek-chrome / `expandRail` in sleek-workspaces change size, min, max and `dim.resizable` in one `layout.set` built from `layout()`. Files/Changes/Context panel 280-800, terminal area min 320. `sidebar-lists` is not resizable: Usage and Activity size themselves to their content.
 - Type scale, only these sizes: 11 (meta, chips), 12, 13 (body), 14 (headings), 16, 18. Icons 12/14/16.
 - Spacing is on a 2px grid (`gap`/`px`: even numbers). Exceptions: `pl(33)` on tree rows (lines agent titles up with workspace names by eye), `px(7)` on workspace rows (keeps text on
   the 14px edge) and `p(3)`/`py(3)`/`gap(1)` where a fitted height or concentric inset depends on them.
@@ -108,6 +109,8 @@ then commit.
 - Check `herdr-app status` overlays before opening/closing menus to test (`overlay.close` closes
   the top one, possibly the user's).
 - `SliderState` with `min` > 100 aborts the app: keep ranges ≤ 100 (scale them).
+- Herdr draws a node at its `min` even if `layout.resize` stored less, so change the limits with the size (`layout.set`). When a row's mins and sizes add up to more than the window, the last child runs off-screen: keep maximums + the terminal's min under the window width. `layout.set` writes the tree to the layout file and clears `.state`, so always send `layout()`, never the file, or dragged sizes are lost.
+- `on_size_change` reports zoomed px while layout sizes are unzoomed: divide by `settings().zoom` before comparing to a breakpoint.
 - `line_height(n)` is a multiplier, not px. `.bg()` takes colours only (no gradients).
   `"transparent"` isn't a colour (`#00000000`). `.child(null)` throws. Don't name a data field
   like a method. No `px()` helper: lengths are numbers.
