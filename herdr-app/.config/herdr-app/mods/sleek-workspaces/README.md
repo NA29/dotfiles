@@ -18,16 +18,17 @@ In **Agents** and **Attention**, a strip of workspace pills sits under the heade
 
 The shared state rule applies to every agent, including Claude Code, Codex and
 OpenCode: an idle/done agent with live background shells belonging to its exact
-terminal is shown as `waiting`. Jobs are discovered by the existing shell scanner;
-folder-only matches are not used for status because several agents can share a repo.
+terminal is shown as `waiting`. Jobs are discovered by the existing shell scanner.
+Status uses the same job association as the visible child rows, including the
+existing folder fallback for detached sessions with no viewer terminal ID.
 
 Native terminal signals supplement process discovery: Claude's latest completion
 footer supplies its shell count. Codex's background-terminal banner supplies its
 count, and its current `Ready` status allows waiting even when core still reports
 `working`. A Codex `Working` footer keeps the running indicator. Approval requests
 always keep priority. Unknown agents use the shared ownership rule without a TUI
-parser. Detached jobs with no attributable terminal stay listed but do not change
-an unrelated agent's status.
+parser. Detached jobs assigned to an agent by the child-row association also contribute
+to its waiting count. Jobs assigned only to a workspace do not change an agent's status.
 
 Waiting rows show a muted native pulse and shell count, with their own Attention
 group. Reads/scans run every five seconds; stale data expires after fifteen seconds,

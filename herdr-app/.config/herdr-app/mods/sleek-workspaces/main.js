@@ -1067,7 +1067,12 @@ export default class Spaces extends View {
     const silent = panes()
       .filter((p) => p.terminal && p.status == null && this.agentKeys.has(p.program?.key) && !known.has(p.terminal) && spaceOfTab.has(p.tab))
       .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, space: spaceOfTab.get(p.tab).id, status: "idle", app: p.app, program: p.program, title: p.title, focused: p.focused, pinned: false }));
-    const list = [...reporting, ...silent].map(a => withShellState(a, this.shellReadings?.[a.address], this.jobs, this.jobsAt));
+    const rawAgents = [...reporting, ...silent];
+    // Status and child rows must use the same association, including detached
+    // sessions whose jobs no longer carry the viewer terminal's address.
+    const jobPlacement = this.placeJobs(rawAgents, spaceOfTab);
+    const list = rawAgents.map(a => withShellState(a, this.shellReadings?.[a.address],
+      (jobPlacement.jobsOf.get(a.address) ?? []).map(job => ({ ...job, terminal: a.address })), this.jobsAt));
     for (const w of sp) {
       const mine = list.filter(a => a.space === w.id);
       if (mine.length) w.status = mine.reduce((best, a) => (RANK[a.status] ?? 0) > (RANK[best] ?? 0) ? a.status : best, "idle");
@@ -1084,7 +1089,7 @@ export default class Spaces extends View {
     const visibleAgents = mode === "workspaces" ? sorted : orderAgents(list, mode);
     setAgentOrder(visibleAgents.map((a) => a.address));
     this.ctx = {
-      ...this.placeJobs(list, spaceOfTab),
+      ...jobPlacement,
       now, bySpace, mono: MONO(), all: terminals(), visibleAgents, prompts: latestPrompts(),
       spaceOf: new Map(sp.map(s => [s.id, s])),
       cwdOf: new Map(panes().map((p) => [p.pane, p.cwd ?? ""])),

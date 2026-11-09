@@ -34,14 +34,14 @@ const state={rice:{'sidebar.agentView':mode,'usage.codex':false},'space.colors':
 const scope={shellReading,shellCount,withShellState,homeDir:()=>"/home/test",VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el,sqDiv:el,image:el,svg:el,v_flex:el,h_flex:el,
  console,Date,Math,Number,String,Boolean,Map,Set,Object,Array,JSON,
  shared:k=>state[k],sqShared:k=>state[k],setShared:(k,v)=>{state[k]=v;calls.push(['shared',k,v]);},
- spaces:()=>sp,machines:()=>[],panes:()=>fixture.map(a=>({pane:a.pane,tab:a.tab,cwd:'/repo'})),agents:()=>fixture,terminals:()=>[],
+ spaces:()=>sp,machines:()=>[],panes:()=>fixture.map(a=>({terminal:a.address,pane:a.pane,tab:a.tab,cwd:'/repo'})),agents:()=>fixture,terminals:()=>[],
  theme:()=>new Proxy({},{get:()=> '#334455'}),layout:()=>({id:'sidebar',size:{px:268}}),window:()=>({active:true}),
  setAgentOrder:a=>calls.push(['order',Array.from(a)]),run:(...a)=>calls.push(['run',...a]),
  props:()=>({overlay:"view-menu"}),closeOverlay:()=>calls.push(["close"]),localStorage:{getItem:()=>null,setItem(){}},settings:()=>({}),watchFolder:async()=>{},openOverlay(){}};
 vm.createContext(scope);
 const source=fs.readFileSync(new URL('../main.js',import.meta.url),'utf8').replace(/^import .*?;\s*$/gm,'').replace(/export function /g,'function ').replace('export default class','globalThis.TestView=class');
 new vm.Script(source).runInContext(scope);
-const view=new scope.TestView();Object.assign(view,{changed:{},git:{},listFolded:false,boxesFolded:new Set(),folded:new Set(),shown:new Set(['one','two']),born:{},ordering:null,pressed:null,over:null,machines:[],reconnecting:{}});
+const view=new scope.TestView();Object.assign(view,{agentKeys:new Set(),changed:{},git:{},listFolded:false,boxesFolded:new Set(),folded:new Set(),shown:new Set(['one','two']),born:{},ordering:null,pressed:null,over:null,machines:[],reconnecting:{}});
 const cx={notify(){},stop_propagation(){}};
 const render=()=>{elements=[];calls=[];view.render();};
 render();assert.deepEqual(calls.find(c=>c[0]==='order')[1],['c','a','b','d','e']);
@@ -130,3 +130,24 @@ view.refreshShells({spawn: f => {scope.readTask = f({notify(){}});}});
 await scope.readTask;
 assert.equal(Object.keys(view.shellReadings).length,0);
 console.log('PASS: live-reader integration includes all agents and clears failed reads.');
+// Detached session: its live jobs are displayed by folder association because
+// they retain no viewer terminal ID. Status must follow those very same rows.
+scope.agents = () => [];
+scope.panes = () => [{pane:'p-silent',terminal:'silent',tab:'t1',cwd:'/detached-project',status:null,program:{key:'opencode',name:'OpenCode'}}];
+view.agentKeys = new Set(['opencode']);
+view.jobs = [{pid:101, terminal:null,cwd:'/detached-project',label:'build',age:120},
+ {pid:102, terminal:'old-terminal',cwd:'/detached-project',label:'worker',age:90}];
+view.jobsAt = Date.now();
+view.shellReadings = {};
+state.rice['sidebar.agentView'] = 'attention';
+render();
+assert(elements.find(e => e.identifier === 'attention-waiting'));
+assert.equal(view.ctx.visibleAgents[0].shells,2);
+assert.equal(view.ctx.jobsOf.get('silent').length,2);
+state.rice['sidebar.agentView'] = 'workspaces';
+render();
+assert.equal(view.ctx.bySpace.get('one')[0].status,'waiting');
+view.jobs = [];
+render();
+assert.equal(view.ctx.bySpace.get('one')[0].status,'idle');
+console.log('PASS: detached statusless agent with two displayed shells shows waiting in Spaces and Attention, then clears when shells finish.');
