@@ -44,7 +44,7 @@
   "panes.header": false,
   "ping.thumbsUp": true,
   "sidebar.activity": true,
-  "sidebar.agentView": "agents",
+  "sidebar.agentView": "workspaces",
   "sidebar.usage": true,
   "tabs.numbers": true,
   "terminal.font": null,
