@@ -1080,7 +1080,7 @@ export default class Spaces extends View {
     const cur = list.find((r) => r.w.active) ?? list[0];
     if (!cur) return div();
     const items = list.map(({ w, i }) => ({ id: w.id, name: w.name, num: i + 1, tone: spaceTone(t, w), status: w.status, active: w.active }));
-    return h_flex().id("ws-strip").flex_none().pb(6).mb(6).items_center()
+    return h_flex().id("ws-strip").flex_none().pb(6).mb(10).items_center()
       .border_b_1().border_color(tint(t.foreground, 0.08))
       .child(h_flex().id("ws-switch").flex_1().min_w(0).h(28).pl(14).pr(14).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
         .hover((s) => s.bg(t.hover))
@@ -1139,10 +1139,12 @@ export default class Spaces extends View {
     const children = [];
     if (mode === "attention") {
       for (const group of attentionGroups(rows)) {
-        children.push(h_flex().id(`attention-${group.status}`).h(26).mt(children.length ? 16 : 0).px(14).gap(12).items_center().flex_none()
+        // A heading sits tight on its rows, with about twice that distance between groups, so each
+        // group reads as one block. It's styled as a label, like the panel title, so agents lead.
+        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 24 : 0).px(14).gap(12).items_center().flex_none()
           .child(h_flex().w(16).flex_none().justify_center().when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status))))
-          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(group.title))
-          .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.muted).child(String(group.agents.length))));
+          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
+          .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
       }
     } else children.push(...rows.flatMap(draw));
