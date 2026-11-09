@@ -234,6 +234,9 @@ export default class Spaces extends View {
     this.readingShells = false;
     this.refreshShells(cx);
     cx.timer.every(5000, cx => this.refreshShells(cx));
+    this.jobs = []; // background shells, from shells.py
+    this.refreshJobs(cx);
+    cx.timer.every(5000, cx => this.refreshJobs(cx));
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -578,6 +581,59 @@ export default class Spaces extends View {
     });
   }
 
+  // Background shells on this machine, in any project (see shells.py).
+  refreshJobs(cx) {
+    if (this.readingJobs || window()?.active === false) return;
+    this.readingJobs = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("python3", ["-I", `${homeDir()}/.config/herdr-app/mods/sleek-workspaces/shells.py`]);
+        if (r.code === 0) this.jobs = JSON.parse(r.stdout);
+      } catch {} finally { this.readingJobs = false; cx.notify(); }
+    });
+  }
+
+  // Where each shell shows: under the agent that started it, or the agent working in its folder.
+  // A shell with no terminal came from a session moved to the background, so a row that reports no
+  // status (that session's viewer) goes first. Otherwise it sits at the end of the workspace.
+  placeJobs(list, spaceOfTab) {
+    const ps = panes().filter((p) => p.terminal);
+    const agentOf = new Map(list.map((a) => [a.address, a]));
+    const rank = (p) => { const a = agentOf.get(p.terminal); return !a ? 0 : a.seq === undefined ? 2 : 1; };
+    const jobsOf = new Map(), looseJobs = new Map();
+    const add = (map, key, job) => map.set(key, [...(map.get(key) ?? []), job]);
+    for (const job of this.jobs ?? []) {
+      const pane = ps.find((p) => p.terminal === job.terminal)
+        ?? ps.filter((p) => p.cwd && p.cwd === job.cwd).sort((x, y) => rank(y) - rank(x))[0];
+      if (!pane) continue;
+      if (agentOf.has(pane.terminal)) add(jobsOf, pane.terminal, job);
+      else if (spaceOfTab.has(pane.tab)) add(looseJobs, spaceOfTab.get(pane.tab).id, job);
+    }
+    return { jobsOf, looseJobs };
+  }
+
+  // Opens a shell's output, following it live, over the current tab.
+  async peekJob(job) {
+    // One viewer at a time: closing a peek can leave its tail running.
+    for (const old of terminals()) if (old.labels?.["sleek.job-viewer"] && old.state === "live") hc(["kill", old.address]).catch(() => {});
+    const r = await hc(["run", "--bg", "--no-parent", "--no-notify", "--rm", "--json", "--label", "sleek.job-viewer=1", "--", "tail", "-n", "200", "-f", job.log]);
+    if (r.code !== 0) return;
+    const terminal = JSON.parse(r.stdout).address;
+    // The app learns about a new terminal a moment after it starts; peeking sooner fails.
+    for (let i = 0; i < 30 && !terminals().some((x) => x.address === terminal); i++) await exec("sleep", ["0.1"]);
+    run("terminal.peek", { terminal });
+  }
+
+  // One background shell: a quiet line like a sub-agent's, click to read its output.
+  jobRow(t, job, ctx, workspace) {
+    return h_flex().id(`job-${job.pid}`).h(24).flex_none().pl(workspace ? 29 : 59).pr(14).gap(8).items_center().rounded(ROW_R())
+      .font_family(ctx.mono).text_size(11).text_color(t.muted)
+      .when(Boolean(job.log), (el) => el.cursor_pointer().hover((h) => h.bg(t.hover)).tooltip(job.log).on_click(() => this.peekJob(job)))
+      .child(div().flex_none().text_color(t.dim).child("↳"))
+      .child(div().flex_1().min_w(0).truncate().child(job.label))
+      .child(div().flex_none().text_color(t.dim).child(duration(job.age * 1000)));
+  }
+
   // Stamps agents whose state changed (done and idle count as one).
   track(list, now) {
     let dirty = false;
@@ -672,6 +728,7 @@ export default class Spaces extends View {
         .child(div().flex_none().text_color(t.dim).child("↳"))
         .child(div().flex_1().min_w(0).truncate().font_family(SANS).child(k.name || k.template || k.program?.name || k.address))
         .child(h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, k.status === "error" ? "blocked" : k.status === "done" ? "idle" : k.status)))),
+      ...(ctx.jobsOf.get(a.address) ?? []).map((job) => this.jobRow(t, job, ctx, workspace)),
     ];
   }
 
@@ -766,8 +823,9 @@ export default class Spaces extends View {
       // Folded: every status with its count. Open: nothing, the rows right below say it.
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))));
 
-    const body = mine.length
-      ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
+    const loose = (ctx.looseJobs.get(w.id) ?? []).map((job) => this.jobRow(t, job, ctx, null));
+    const body = mine.length || loose.length
+      ? v_flex().pt(2).gap(2).children([...mine.flatMap((a) => this.agentRow(t, a, ctx)), ...loose])
       : h_flex().id(`empty-${w.id}`).h(24).pl(59).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
           .font_family(SANS).text_size(12).text_color(t.dim)
           .hover((el) => el.bg(t.hover).text_color(t.muted))
@@ -1003,6 +1061,7 @@ export default class Spaces extends View {
     const visibleAgents = mode === "workspaces" ? sorted : orderAgents(list, mode);
     setAgentOrder(visibleAgents.map((a) => a.address));
     this.ctx = {
+      ...this.placeJobs(list, spaceOfTab),
       now, bySpace, mono: MONO(), all: terminals(), visibleAgents, prompts: latestPrompts(),
       spaceOf: new Map(sp.map(s => [s.id, s])),
       cwdOf: new Map(panes().map((p) => [p.pane, p.cwd ?? ""])),
