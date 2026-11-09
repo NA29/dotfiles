@@ -192,3 +192,18 @@ view.jobsFailed=true;renderPopup();
 assert.equal(elements.find(e=>e.identifier==='shell-empty-title').text,"Couldn't read shells");
 view.jobsFailed=false;
 console.log('PASS: shells stay out of the agent list, the dot opens a live popup without focusing the row, and empty states are clear.');
+// A backgrounded session reports no status: its screen decides between running and waiting.
+for (const line of ['✻ Deliberating… (10s · ↓ 913 tokens · thought for 2s)','· Percolating… (4m 7s · ↓ 26.3k tokens)','* Moseying… (34s · ↓ 2.9k tokens)'])
+ assert.equal(shellReading(line).busy,true,line);
+for (const line of ['✻ Worked for 42s · done 2:14 PM · 2 shells still running','Running 2 shell commands…','• Thinking… about this (later)',''])
+ assert.equal(shellReading(line).busy,false,line);
+const silentAgent={address:'bg',status:'idle',program:{key:'claude'}};
+const busyScreen={seq:undefined,at:Date.now(),count:1,busy:true};
+const quietScreen={...busyScreen,busy:false};
+const ownJobs=[{terminal:'bg'}];
+assert.equal(withShellState(silentAgent,busyScreen,ownJobs,Date.now()).status,'working','replying beats waiting');
+assert.equal(withShellState(silentAgent,quietScreen,ownJobs,Date.now()).status,'waiting','only shells left means waiting');
+assert.equal(withShellState(silentAgent,{...busyScreen,at:Date.now()-16000},[],0).status,'idle','stale screens are ignored');
+assert.equal(withShellState({...silentAgent,status:'blocked'},busyScreen,ownJobs,Date.now()).status,'blocked');
+assert.equal(withShellState({...silentAgent,seq:4,status:'done'},{...busyScreen,seq:4,count:0},[],0).status,'done','agents that report status keep their own');
+console.log('PASS: a backgrounded session shows running while replying and waiting once only shells remain.');

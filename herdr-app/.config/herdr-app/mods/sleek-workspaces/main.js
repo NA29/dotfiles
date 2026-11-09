@@ -582,7 +582,8 @@ export default class Spaces extends View {
     this.readingShells = true;
     cx.spawn(async (cx) => {
       try {
-        const candidates = agents().filter(a => a.status !== 'blocked');
+        // Every listed agent, including those that report no status: their screen is all there is.
+        const candidates = this.agentEntries(spaces()).rawAgents.filter(a => a.status !== 'blocked');
         const next = {};
         await Promise.all(candidates.map(async a => {
           try {

@@ -29,6 +29,10 @@ always keep priority. Unknown agents use the shared ownership rule without a TUI
 parser. Detached jobs assigned to an agent by the popup's association also contribute
 to its waiting count. Jobs assigned only to a workspace do not change an agent's status.
 
+A session moved to the background reports no status, so it would always look idle. Its screen is
+read too: Claude's live turn line (`Deliberating… (10s · …)`) shows it as running, which outranks
+waiting on shells.
+
 Waiting rows show only a muted native pulse, with their own Attention group. Shells never appear
 inline: clicking the pulse opens a popup listing that agent's running shells, and clicking a shell
 follows its output in the existing viewer. The popup rescans every two seconds while open and says
