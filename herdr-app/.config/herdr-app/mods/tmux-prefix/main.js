@@ -4,7 +4,7 @@
 // settings, t = toggle transparency, b = toggle sidebar, g = Go to (my-goto).
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { closeOverlay, focused, hc, nextCommand, openOverlay, props, run, setShared, shared, theme } from "herdr";
+import { closeOverlay, focused, hc, nextCommand, openOverlay, props, run, setShared, shared, theme, spaces } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
 
@@ -74,6 +74,14 @@ function translucent(color, alpha) {
   return color + Math.round(alpha * 255).toString(16).padStart(2, "0");
 }
 
+// Shift+number jumps to that workspace. It types a symbol that depends on the layout, so these
+// cover Canadian (and US) and Canadian CSA. Symbols already bound to something ("%", '"', "?")
+// aren't listed, and keep their meaning.
+const SHIFTED_NUMBERS = { "!": 1, "@": 2, "#": 3, "/": 3, "$": 4, "^": 6, "&": 7, "*": 8, "(": 9 };
+function shiftedNumber(key) {
+  return SHIFTED_NUMBERS[key] ?? (/^[1-9]$/.test(key) ? Number(key) : null);
+}
+
 function forwardKey(e, key) {
   if (["enter", "tab", "backspace", "left", "right", "up", "down", "space"].includes(e.key)) return e.key;
   if (key === " ") return "space";
@@ -135,6 +143,12 @@ export default class TmuxPrefix extends View {
       cx.notify();
       return;
     }
+    const space = plain && m.shift ? shiftedNumber(key) : null;
+    if (space) {
+      this.dismiss();
+      if (space <= spaces().length) run("space.select", { index: space });
+      return;
+    }
     const binding = plain && BINDINGS.find((b) => b[0] === key);
     if (!binding) {
       const forwarded = this.repeat && plain && forwardKey(e, key);
@@ -166,7 +180,7 @@ export default class TmuxPrefix extends View {
         [["1–9", "Tab 1–9"], ["0", "Tab 10"]]],
       ["Panes", [["%", "Split right"], ['"', "Split down"], ["h j k l", "Focus pane"], ["z", "Zoom pane"], ["x", "Close pane"]],
         [["← ↓ ↑ →", "Focus pane"]]],
-      ["Spaces", [["J", "Next space", true], ["K", "Previous space", true]], []],
+      ["Spaces", [["J", "Next space", true], ["K", "Previous space", true], ["⇧ 1–9", "Go to space"]], []],
       ["App", [["g", "Go to…"], ["a", "Activity log"], ["u", "Usage"], ["s", "Settings"], ["t", "Toggle transparency"], ["b", "Toggle sidebar"], ["d", "Minimize window"]], []],
     ];
     const cap = (text, accent = false) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(4)
