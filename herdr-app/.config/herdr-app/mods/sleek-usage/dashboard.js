@@ -18,7 +18,7 @@ const percent=(n,total)=>!total?'0%':n/total*100<0.1&&n>0?'<0.1%':`${(n/total*10
 const label=(text,t,size=12)=>div().font_family(SANS).text_size(size).text_color(t.muted).child(text);
 const number=(text,t,size=12)=>div().font_family(MONO).text_size(size).text_color(t.foreground).child(String(text));
 const rect=()=>PathBuilder.fill().move_to('0%','0%').line_to('100%','0%').line_to('100%','100%').line_to('0%','100%').close().build();
-function chip(id,text,on,action,t){return div().id(id).px(10).h(28).flex_none().flex().items_center().justify_center().rounded(6).bg(on?tint(t.accent,selA(t)):tint(t.foreground,0.06)).text_color(on?t.foreground:t.muted).font_family(SANS).text_size(12).cursor_pointer().hover(h=>h.bg(t.hover).text_color(t.foreground)).on_click(action).child(text);}
+function chip(id,text,on,action,t,contentColor){return div().id(id).px(10).h(28).flex_none().flex().items_center().justify_center().rounded(6).bg(on?tint(t.accent,selA(t)):tint(t.foreground,0.06)).text_color(on?t.foreground:(contentColor??t.muted)).font_family(SANS).text_size(12).cursor_pointer().hover(h=>h.bg(t.hover).text_color(t.foreground)).on_click(action).child(text);}
 function heading(text,t){return div().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(text);}
 
 function chart(v,t,data){
@@ -123,7 +123,11 @@ function limitRow(v,t,name,w,color,now){
 function limits(v,t){
  const now=Date.now()/1000,raw=readings(v.raw.claude,v.raw.codex,now);
  const list=PROVIDERS.filter(p=>v.providerFilter==='all'||v.providerFilter===p[0]);
- return v_flex().w_full().max_w(1060).gap(26).children(list.map(([id,name,icon])=>{
+ return v_flex().w_full().max_w(1060).gap(26)
+  .when(Boolean(v.errors?.limits),el=>el.child(h_flex().px(14).py(10).gap(8).items_center().rounded(6).bg(tint(t.blocked,0.12))
+   .child(svg('mods/my-settings/x.svg').size(14).flex_none().text_color(t.blocked))
+   .child(div().font_family(SANS).text_size(12).text_color(t.blocked).child(v.errors.limits))))
+  .children(list.map(([id,name,icon])=>{
   const d=raw[id],source=v.raw[id],color=colorOf(t,id);
   const expired=d?.five?.expired||d?.week?.expired;
   return v_flex().gap(10)
@@ -155,7 +159,13 @@ export function dashboard(v,cx){
   .child(div().flex_1())
   .when(v.tab!=='limits',el=>el.child(h_flex().gap(2).children([[1,'Past 24h'],[7,'7 days'],[30,'30 days'],[90,'90 days']].map(([n,text])=>chip(`usage-period-${n}`,text,v.period===n,(_e,c)=>{v.period=n;v.handle.focus();c.notify();v.loadHistory(c);},t)))))
   .child(h_flex().gap(2).ml(4).children(['cost','tokens','limits'].map(key=>chip(`usage-view-${key}`,key[0].toUpperCase()+key.slice(1),v.tab===key,chooseTab(key),t))))
-  .child(chip('usage-refresh',(v.refreshing||v.historyLoading)?'…':svg('mods/my-settings/reset.svg').size(14),false,(_e,c)=>{v.refresh(c);if(v.tab!=='limits')v.loadHistory(c);v.handle.focus();},t).tooltip('Reload limits and local usage history'))
+  .child(chip('usage-refresh',
+   (v.refreshing||v.historyLoading)?'…'
+    :v.refreshState==='ok'?svg('mods/my-settings/check.svg').size(14)
+    :v.refreshState==='error'?svg('mods/my-settings/x.svg').size(14)
+    :svg('mods/my-settings/reset.svg').size(14),
+   false,(_e,c)=>{v.refresh(c);if(v.tab!=='limits')v.loadHistory(c);v.handle.focus();},t,
+   v.refreshState==='ok'?t.done:v.refreshState==='error'?t.blocked:t.muted).tooltip('Reload limits from local records and local usage history'))
   .child(chip('usage-close',svg('mods/my-settings/x.svg').size(14),false,close,t));
  return v_flex().id('usage-dialog').size_full().track_focus(v.handle)
   .on_key_down((e,c)=>{
