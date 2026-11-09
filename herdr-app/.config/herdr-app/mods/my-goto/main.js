@@ -5,7 +5,8 @@
 //   Actions     new tab/space, rename, settings, sidebar; shortcuts read from keys.json
 // Vim-style modes, set by the field itself: a leading "/" means search (insert) mode.
 // Normal (on open, empty field): j/k move, l or Enter opens, h jumps up to the space, gg/G
-// top/bottom, ⌃D/⌃U half a page, x closes the selected tab, q leaves, / starts a search.
+// top/bottom, ⌃D/⌃U half a page, 1-9 jumps to that workspace, x closes the selected tab, q leaves,
+// / starts a search.
 // Insert ("/…" in the field): type to filter (every word must match), ↑/↓ or ⌃N/⌃P move,
 // Enter opens; Backspace over the "/" goes back to normal. Esc always leaves.
 
@@ -436,6 +437,7 @@ export default class GoTo extends View {
         else if (ctrl && k === "d") { this.at = Math.min(pickable.length - 1, (this.at ?? 0) + half); this.follow = true; cx.notify(); }
         else if (ctrl && k === "u") { this.at = Math.max(0, (this.at ?? 0) - half); this.follow = true; cx.notify(); }
         else if (ch === "x") { if (sel?.kind === "tab") { this.close(); run("tab.close", { id: sel.tab.id }); } }
+        else if (/^[1-9]$/.test(ch)) { const s = spaces()[Number(ch) - 1]; if (s) this.go({ kind: "space", s }); }
         else return;
         cx.stop_propagation();
       })
@@ -472,6 +474,7 @@ export default class GoTo extends View {
             .child(h_flex().gap(6).items_center().child(this.cap(t, "j k")).child("Move"))
             .child(h_flex().gap(6).items_center().child(this.cap(t, "l")).child("Open"))
             .child(h_flex().gap(6).items_center().child(this.cap(t, "h")).child("Space"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "1–9")).child("Workspace"))
             .child(h_flex().gap(6).items_center().child(this.cap(t, "x")).child("Close tab"))
             .child(h_flex().gap(6).items_center().child(this.cap(t, "q")).child("Quit")))
           .when(this.mode === "insert", (el) => el

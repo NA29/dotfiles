@@ -7,9 +7,10 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir, knownAgents } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
+import { shellReading, withShellState } from "./shell-state.js";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
 
 // Personal: the Square corners setting (rice "look.square") squares every corner drawn with
@@ -76,6 +77,10 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
+// The shell popup: rows shown before it scrolls, and how often it rescans while open.
+const SHELL_MENU_ROWS = 5;
+const SHELL_ROW_STEP = 50; // a row and the gap after it
+const SHELL_MENU_REFRESH = 2000;
 
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
@@ -136,15 +141,6 @@ const numInk = (t, c, dim = false) => {
   return "#" + [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + parseInt(String(t.foreground).slice(i, i + 2), 16) * 0.45).toString(16).padStart(2, "0")).join("");
 };
 
-function workspaceNumber(t, w, i) {
-  const color = w.name === "~" ? t.ansi6 : (() => {
-    const stored = (shared("space.colors") ?? {})[w.id];
-    return !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
-  })();
-  return div().w(20).flex_none().font_family("Geist Mono").font_semibold().text_size(13)
-    .text_color(numInk(t, color, !w.active)).child(String(i + 1).padStart(2, "0"));
-}
-
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
@@ -155,7 +151,7 @@ export function glyph(status) {
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
 const SANS = "Geist";
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+const RANK = { blocked: 4, done: 3, working: 2, waiting: 1.5, idle: 1 };
 function duration(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "now";
@@ -216,14 +212,46 @@ const lift = (t, k) => {
 
 // Personal: selection strength. A wash that reads on dark looks heavy on white.
 const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
+// Keycap, as in Go to and the other menus.
+function keyCap(t, text) {
+  return div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
+    .font_family(MONO()).text_size(11).text_color(t.muted).child(text);
+}
+
+// A shell's second line: its log inside the project, else the project it runs in.
+function shellDetail(job) {
+  if (!job.log) return "No output file";
+  if (job.cwd && job.log.startsWith(`${job.cwd}/`)) return job.log.slice(job.cwd.length + 1);
+  return job.cwd?.split("/").filter(Boolean).pop() ?? job.log.split("/").pop();
+}
+
 export default class Spaces extends View {
   init(_props, cx) {
-    if (props()?.viewMenu || props()?.spaceMenu) {
+    // Which programs are agents, for panes that report no status (see render).
+    this.agentKeys = new Set(props()?.agentKeys ?? []);
+    cx.spawn(async (cx) => {
+      try { this.agentKeys = new Set((await knownAgents()).map((a) => a.key)); cx.notify(); } catch {}
+    });
+    if (props()?.viewMenu || props()?.shellMenu) {
       this.menuHandle = cx.focus_handle();
       this.menuHandle.focus();
-      this.menuAt = Math.max(0, (props()?.items ?? []).findIndex((it) => it.active));
+      this.menuAt = 0;
+      if (props()?.shellMenu) {
+        this.jobs = [];
+        this.jobsAt = 0;
+        this.sawShells = (props().jobs ?? []).length > 0;
+        this.refreshJobs(cx);
+        cx.timer.every(SHELL_MENU_REFRESH, (cx) => this.refreshJobs(cx));
+      }
       return;
     }
+    this.shellReadings = {};
+    this.readingShells = false;
+    this.refreshShells(cx);
+    cx.timer.every(5000, cx => this.refreshShells(cx));
+    this.jobs = []; // background shells, from shells.py
+    this.refreshJobs(cx);
+    cx.timer.every(5000, cx => this.refreshJobs(cx));
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -549,6 +577,198 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  refreshShells(cx) {
+    if (this.readingShells) return;
+    this.readingShells = true;
+    cx.spawn(async (cx) => {
+      try {
+        // Every listed agent, including those that report no status: their screen is all there is.
+        const candidates = this.agentEntries(spaces()).rawAgents.filter(a => a.status !== 'blocked');
+        const next = {};
+        await Promise.all(candidates.map(async a => {
+          try {
+            const screen = await hc(['read', a.address]);
+            if (screen.code === 0) next[a.address] = { seq: a.seq, ...shellReading(screen.stdout), at: Date.now() };
+          } catch {} // Missing terminals and failed reads clear their previous reading.
+        }));
+        this.shellReadings = next;
+      } finally { this.readingShells = false; cx.notify(); }
+    });
+  }
+
+  // Background shells on this machine, in any project (see shells.py).
+  refreshJobs(cx) {
+    if (this.readingJobs || window()?.active === false) return;
+    this.readingJobs = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("python3", ["-I", `${homeDir()}/.config/herdr-app/mods/sleek-workspaces/shells.py`]);
+        if (r.code !== 0) throw new Error("Shell scan failed");
+        this.jobs = JSON.parse(r.stdout);
+        this.jobsAt = Date.now();
+        this.jobsFailed = false;
+      } catch { this.jobs = []; this.jobsAt = 0; this.jobsFailed = true; } finally { this.readingJobs = false; cx.notify(); }
+    });
+  }
+
+  // Which agent's popup each shell belongs to: the agent that started it, or the one working in its folder.
+  // A shell with no terminal came from a session moved to the background, so a row that reports no
+  // status (that session's viewer) goes first. Otherwise it belongs to the workspace.
+  placeJobs(list, spaceOfTab) {
+    const ps = panes().filter((p) => p.terminal);
+    const agentOf = new Map(list.map((a) => [a.address, a]));
+    const rank = (p) => { const a = agentOf.get(p.terminal); return !a ? 0 : a.seq === undefined ? 2 : 1; };
+    const jobsOf = new Map(), looseJobs = new Map();
+    const add = (map, key, job) => map.set(key, [...(map.get(key) ?? []), job]);
+    for (const job of this.jobs ?? []) {
+      const pane = ps.find((p) => p.terminal === job.terminal)
+        ?? ps.filter((p) => p.cwd && p.cwd === job.cwd).sort((x, y) => rank(y) - rank(x))[0];
+      if (!pane) continue;
+      if (agentOf.has(pane.terminal)) add(jobsOf, pane.terminal, job);
+      else if (spaceOfTab.has(pane.tab)) add(looseJobs, spaceOfTab.get(pane.tab).id, job);
+    }
+    return { jobsOf, looseJobs };
+  }
+
+  // Opens a shell's output, following it live, over the current tab.
+  async peekJob(job) {
+    // One viewer at a time: closing a peek leaves its tail running. One kept as a tab is yours.
+    for (const old of terminals()) if (old.labels?.["sleek.job-viewer"] && !old.labels["herdr.tab"] && !old.keep && old.state === "live") hc(["kill", old.address]).catch(() => {});
+    const r = await hc(["run", "--bg", "--no-parent", "--no-notify", "--rm", "--json", "--label", "sleek.job-viewer=1", "--", "tail", "-n", "200", "-f", job.log]);
+    if (r.code !== 0) return false;
+    const terminal = JSON.parse(r.stdout).address;
+    // The app learns about a new terminal a moment after it starts; peeking sooner fails.
+    for (let i = 0; i < 30 && !terminals().some((x) => x.address === terminal); i++) await exec("sleep", ["0.1"]);
+    run("terminal.peek", { terminal });
+    return true;
+  }
+
+  openShellMenu(spec) {
+    // Room for a full list: the panel fits its content, and shells can start while it's open.
+    openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 340, height: 97 + SHELL_MENU_ROWS * SHELL_ROW_STEP, frame: "none",
+      props: { shellMenu: true, agentKeys: [...this.agentKeys], ...spec } });
+  }
+
+  // The waiting dot is the way into an agent's shells. Sized as a real target, then pulled back by
+  // margins: on the status marks' axis, or flush with the ages and counts where it's the only mark.
+  shellButton(t, a, ctx, flush) {
+    return div().id(`shells-${a.address}`).size(20).my(-2).mr(flush ? -6.5 : -3.5).flex_none().flex().items_center().justify_center().rounded(4)
+      .cursor_pointer().hover((el) => el.bg(t.hover))
+      .tooltip("Waiting for background shells")
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.openShellMenu({
+          agent: a.address, program: a.program?.name ?? a.app ?? "This agent", reported: a.shells,
+          title: sessionName(a, ctx.cwdOf, ctx.tabOf) ?? a.program?.name ?? a.app ?? "Agent",
+          jobs: ctx.jobsOf.get(a.address) ?? [],
+        });
+      })
+      .child(this.agentStatus(t, "waiting"));
+  }
+
+  // Shells in a workspace with no agent to hold them have no dot, so they get one line that opens the same popup.
+  looseShellsRow(t, w, jobs) {
+    return h_flex().id(`loose-shells-${w.id}`).h(24).flex_none().pl(59).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
+      .font_family(SANS).text_size(12).text_color(t.dim)
+      .hover((el) => el.bg(t.hover).text_color(t.muted))
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.openShellMenu({ space: w.id, title: w.name, jobs });
+      })
+      .child(`${jobs.length} background ${jobs.length === 1 ? "shell" : "shells"}`);
+  }
+
+  // The popup's list, placed exactly as the sidebar places it. Until its first scan lands it shows
+  // what the sidebar knew when it opened, so it never starts empty.
+  shellMenuJobs() {
+    const p = props();
+    if (this.jobsFailed) return [];
+    if (!this.jobsAt) return p.jobs ?? [];
+    const { rawAgents, spaceOfTab } = this.agentEntries(spaces());
+    const placed = this.placeJobs(rawAgents, spaceOfTab);
+    return (p.agent ? placed.jobsOf.get(p.agent) : placed.looseJobs.get(p.space)) ?? [];
+  }
+
+  // Same language as the view menu: chrome panel, header with a mode block, two-line rows, key hints.
+  renderShellMenu() {
+    const t = theme();
+    const p = props();
+    const jobs = this.shellMenuJobs();
+    if (jobs.length) this.sawShells = true;
+    const close = () => closeOverlay(p.overlay);
+    // The cursor stays on its shell as others start and finish around it.
+    const same = jobs.findIndex((job) => job.pid === this.menuPid);
+    const at = same >= 0 ? same : Math.min(this.menuAt ?? 0, Math.max(jobs.length - 1, 0));
+    this.menuAt = at;
+    this.menuPid = jobs[at]?.pid;
+    const open = (job, cx) => {
+      if (!job?.log || this.openingPid !== undefined) return;
+      this.openingPid = job.pid;
+      cx.notify();
+      // Closing first would cancel the viewer before it opens.
+      cx.spawn(async (cx) => {
+        let opened = false;
+        try { opened = await this.peekJob(job); } catch {}
+        if (opened) { close(); return; }
+        this.openingPid = undefined;
+        cx.notify();
+      });
+    };
+    const hint = (keys, label) => h_flex().gap(6).items_center().child(keyCap(t, keys)).child(label);
+    const row = (job, i) => {
+      const opening = this.openingPid === job.pid;
+      return h_flex().id(`shell-pick-${job.pid}`).h(48).flex_none().mx(5).px(10).gap(10).items_center().rounded(6)
+        .when(i === at && Boolean(job.log), (el) => el.bg(t.hover))
+        .when(Boolean(job.log), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).tooltip(job.log)
+          .on_click((_e, cx) => { cx.stop_propagation(); open(job, cx); }))
+        .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(4).bg(tint(t.foreground, 0.05))
+          .child(svg("mods/workspace-chrome/terminal.svg").size(14).text_color(t.muted)))
+        .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(div().truncate().font_family(MONO()).text_color(t.foreground).child(job.label))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(shellDetail(job))))
+        .child(opening
+          ? svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.muted).spin(900)
+          : div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(duration(job.age * 1000)));
+    };
+    const unavailable = !this.sawShells && p.reported > 0;
+    const [emptyTitle, emptyBody] = this.jobsFailed ? ["Couldn't read shells", "Herdr will keep trying while this is open."]
+      : unavailable ? ["Shell details unavailable", `${p.program} reports ${p.reported} background ${p.reported === 1 ? "shell" : "shells"} that can't be inspected from here.`]
+      : ["All shells finished", "Nothing is running in the background."];
+    const body = jobs.length
+      ? v_flex().id("shell-popup-list").w_full().max_h(SHELL_MENU_ROWS * SHELL_ROW_STEP).my(4).gap(2).overflow_y_scrollbar().children(jobs.map(row))
+      : v_flex().id("shell-popup-empty").w_full().px(24).pt(20).pb(24).gap(4).items_center()
+        .child(div().id("shell-empty-title").font_semibold().child(emptyTitle))
+        .child(div().text_center().text_size(11).text_color(t.dim).child(emptyBody));
+    return v_flex().id("shell-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
+      .on_key_down((e, cx) => {
+        const key = e.key_char ?? e.key;
+        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
+        if (e.key === "escape") { cx.stop_propagation(); close(); return; }
+        if (!plain || !jobs.length) return;
+        if (key === "j" || e.key === "down") this.menuAt = (at + 1) % jobs.length;
+        else if (key === "k" || e.key === "up") this.menuAt = (at + jobs.length - 1) % jobs.length;
+        else if (e.key === "enter" || key === "l") { cx.stop_propagation(); open(jobs[at], cx); return; }
+        else return;
+        this.menuPid = jobs[this.menuAt].pid;
+        cx.stop_propagation();
+        cx.notify();
+      })
+      .child(v_flex().w_full().rounded(12).border_1().border_color(t.border).overflow_hidden()
+        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(5)
+        .child(h_flex().h(46).flex_none().mx(5).px(14).gap(10).items_center().rounded(6).bg(tint(t.foreground, 0.06))
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(4).font_family(MONO()).text_size(11).font_bold()
+            .bg(t.muted).text_color(t.background).child("SHELLS"))
+          .child(div().flex_1().min_w(0).truncate().font_semibold().child(p.title))
+          .child(h_flex().flex_none().gap(6).items_center().text_size(11).text_color(t.dim).child(keyCap(t, "esc")).child("Close")))
+        .child(body)
+        .when(jobs.length > 0, (el) => el.child(h_flex().h(38).flex_none().px(15).gap(14).items_center().text_size(11).text_color(t.dim)
+          .child(hint("j k", "Move"))
+          .child(hint("↵", "Open output"))
+          .child(div().flex_1())
+          .child(div().font_family(MONO()).child(`${jobs.length} running`)))));
+  }
+
   // Stamps agents whose state changed (done and idle count as one).
   track(list, now) {
     let dirty = false;
@@ -562,10 +782,10 @@ export default class Spaces extends View {
   }
 
   // The right end of a row's first line: the status when it matters, otherwise how long ago the
-  // agent last changed. Flush right, so ages and marks share one edge. Attention rows don't repeat
-  // their group's status.
+  // agent last changed. Flush right, so ages and marks share one edge.
   rowEnd(t, a, ctx, when, workspace = null) {
-    const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
+    if (a.status === "waiting") return this.shellButton(t, a, ctx, Boolean(workspace?.quiet));
+    const loud = a.status === "working" || a.status === "blocked" || a.status === "done";
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
     return h_flex().flex_none().items_center().font_family(ctx.mono).text_size(11).text_color(!workspace && !a.focused ? t.dim : t.muted)
@@ -594,6 +814,7 @@ export default class Spaces extends View {
   }
 
   agentStatus(t, st) {
+    if (st === "waiting") return div().size(7).mx(3).flex_none().rounded_full().bg(t.muted).loop("opacity", { from: 0.35, to: 0.8, period: 1800 });
     if (st === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
     if (st === "blocked") return div().size(14).flex_none().rounded(3).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (st === "done") return div().size(7).mx(3).flex_none().rounded(4).bg(t.done);
@@ -645,11 +866,11 @@ export default class Spaces extends View {
   // rows use (a spinner, a red !, a filled dot; idle has no mark) so the edge and the rows agree.
   counts(t, mine) {
     const n = (st) => mine.filter((a) => a.status === st).length;
-    const mark = (st) => st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(10).flex_none().text_color(t.working).spin(900)
+    const mark = (st) => st === "waiting" ? this.agentStatus(t, st) : st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(10).flex_none().text_color(t.working).spin(900)
       : st === "blocked" ? div().flex_none().font_bold().text_color(t.blocked).child("!")
       : st === "done" ? div().size(6).flex_none().rounded(3).bg(t.done)
       : null;
-    return ["blocked", "working", "done", "idle"]
+    return ["blocked", "working", "waiting", "done", "idle"]
       .filter((st) => n(st) > 0)
       .map((st) => h_flex().flex_none().gap(4).items_center().when(st !== "idle", (el) => el.child(mark(st)))
         .child(div().text_color(st === "idle" ? t.dim : t.muted).child(String(n(st)))));
@@ -732,8 +953,9 @@ export default class Spaces extends View {
       // Folded: every status with its count. Open: nothing, the rows right below say it.
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))));
 
-    const body = mine.length
-      ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
+    const loose = ctx.looseJobs.get(w.id) ?? [];
+    const body = mine.length || loose.length
+      ? v_flex().pt(2).gap(2).children([...mine.flatMap((a) => this.agentRow(t, a, ctx)), ...(loose.length ? [this.looseShellsRow(t, w, loose)] : [])])
       : h_flex().id(`empty-${w.id}`).h(24).pl(59).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
           .font_family(SANS).text_size(12).text_color(t.dim)
           .hover((el) => el.bg(t.hover).text_color(t.muted))
@@ -763,7 +985,7 @@ export default class Spaces extends View {
   // Narrow sidebar (rail): the workspace's badge, centred; the shown one sits on the same faint
   // accent tile as its card; a corner dot tells what its agents are doing.
   compact({ w, i }, t) {
-    const dot = w.status === "blocked" ? t.blocked : w.status === "done" ? t.done : w.status === "working" ? t.working : null;
+    const dot = w.status === "blocked" ? t.blocked : w.status === "done" ? t.done : w.status === "working" ? t.working : w.status === "waiting" ? t.muted : null;
     return h_flex().id(`space-${w.id}`).relative().w_full().h(30).mb(2).flex_none().items_center().justify_center().rounded(ROW_R())
       .cursor_pointer().tooltip(w.name)
       .when(w.active, (el) => el.bg(tint(t.accent, selA(t))))
@@ -799,10 +1021,9 @@ export default class Spaces extends View {
     };
     // Same language as Go to (my-goto): chrome panel, filled header with a mode block,
     // Raycast-style rows (icon tile, title, hint, keycap), keycap hints in the footer.
-    const hints = ["Agents under each workspace", "One flat list with workspace names", "Needs you, ready, running, idle"];
+    const hints = ["Agents under each workspace", "One flat list with workspace names", "Needs you, ready, running, waiting for shells, idle"];
     const icons = ["mods/workspace-chrome/layers.svg", "mods/sleek-workspaces/agents.svg", "mods/sleek-workspaces/attention.svg"];
-    const cap = text => div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
-      .font_family(MONO()).text_size(11).text_color(t.muted).child(text);
+    const cap = (text) => keyCap(t, text);
     const hint = (keys, label) => h_flex().gap(6).items_center().child(cap(keys)).child(label);
     const current = VIEW_MODES.find(([id]) => id === mode)?.[1] ?? "Spaces";
     return v_flex().id("agent-view-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
@@ -842,64 +1063,6 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Agents and Attention: pick the workspace (the + makes new agents in the shown one). A dropdown,
-  // because it's one choice from a list of any length with names of any width: one uniform line
-  // showing the current workspace in full, and every workspace by name one click away.
-  strip(t) {
-    const list = this.ordered();
-    const cur = list.find((r) => r.w.active) ?? list[0];
-    if (!cur) return div();
-    const items = list.map(({ w, i }) => ({ id: w.id, name: w.name, num: i + 1, tone: spaceTone(t, w), status: w.status, active: w.active }));
-    return h_flex().id("ws-strip").flex_none().pb(6).mb(6).items_center()
-      .border_b_1().border_color(tint(t.foreground, 0.08))
-      .child(h_flex().id("ws-switch").flex_1().min_w(0).h(28).pl(14).pr(14).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
-        .hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => {
-          cx.stop_propagation();
-          openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 260, height: Math.min(10 + items.length * 32, 344), frame: "none", props: { spaceMenu: true, items } });
-        })
-        .on_mouse_down("right", () => this.menu(cur.w))
-        .child(workspaceNumber(t, cur.w, cur.i))
-        .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(cur.w.name))
-        .child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.muted)));
-  }
-
-  // The workspace dropdown. Numbers pick directly; j/k and Enter move and choose; Esc closes.
-  renderSpaceMenu() {
-    const t = theme();
-    const items = props()?.items ?? [];
-    const close = () => closeOverlay(props().overlay);
-    const choose = (it) => { if (it) run("space.select", { id: it.id }); close(); };
-    return v_flex().id("space-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
-      .on_key_down((e, cx) => {
-        const key = e.key_char ?? e.key;
-        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
-        if (e.key === "escape") { cx.stop_propagation(); close(); return; }
-        if (!plain || !items.length) return;
-        if (/^[1-9]$/.test(key)) { const it = items.find((x) => x.num === Number(key)); if (it) { cx.stop_propagation(); choose(it); } return; }
-        if (key === "j" || e.key === "down") this.menuAt = (this.menuAt + 1) % items.length;
-        else if (key === "k" || e.key === "up") this.menuAt = (this.menuAt + items.length - 1) % items.length;
-        else if (e.key === "enter" || key === "l") { cx.stop_propagation(); choose(items[this.menuAt]); return; }
-        else return;
-        cx.stop_propagation(); cx.notify();
-      })
-      .child(v_flex().id("space-popup-list").w_full().max_h(344).rounded(12).border_1().border_color(t.border).overflow_y_scrollbar()
-        .bg(t.chrome).text_color(t.foreground).text_size(13).py(4).gap(2)
-        .children(items.map((it, i) => {
-          const flag = it.status === "blocked" ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
-            : it.status === "done" ? div().size(6).flex_none().rounded_full().bg(t.done) : null;
-          return h_flex().id(`space-pick-${it.id}`).h(30).flex_none().mx(5).px(9).gap(8).items_center().rounded(6).cursor_pointer()
-            .when(it.active, (el) => el.bg(tint(t.accent, selA(t))))
-            .when(!it.active && i === this.menuAt, (el) => el.bg(t.hover))
-            .when(!it.active, (el) => el.hover((s) => s.bg(t.hover)))
-            .on_click((_e, cx) => { cx.stop_propagation(); choose(it); })
-            .child(div().w(20).flex_none().font_family(MONO()).font_semibold().text_color(numInk(t, it.tone, !it.active)).child(String(it.num).padStart(2, "0")))
-            .child(div().flex_1().min_w(0).truncate().text_color(it.active ? t.foreground : t.muted).when(it.active, (d) => d.font_semibold()).child(it.name))
-            .when(Boolean(flag), (el) => el.child(flag))
-            .when(it.active, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.accent)));
-        })));
-  }
-
   individuals(t, mode) {
     const ctx = this.ctx;
     const rows = ctx.visibleAgents;
@@ -909,10 +1072,11 @@ export default class Spaces extends View {
     const children = [];
     if (mode === "attention") {
       for (const group of attentionGroups(rows)) {
-        children.push(h_flex().id(`attention-${group.status}`).h(26).mt(children.length ? 16 : 0).px(14).gap(12).items_center().flex_none()
-          .child(h_flex().w(16).flex_none().justify_center().when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status))))
-          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(group.title))
-          .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.muted).child(String(group.agents.length))));
+        // A heading starts on the panel title's edge, outdented from its rows, so the eye can run
+        // down the labels. It's styled as a label too, so agents lead. Status marks live on the rows.
+        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 16 : 6).mb(4).px(14).gap(8).items_center().flex_none()
+          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
+          .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
       }
     } else children.push(...rows.flatMap(draw));
@@ -923,9 +1087,23 @@ export default class Spaces extends View {
   }
 
 
+  // Every agent to list, shared by the sidebar and the shell popup so both place shells alike.
+  agentEntries(sp) {
+    // agents() only has terminals that report a status. A pane running an agent that reports none
+    // (Claude Code sends no status from a session moved to the background) still belongs in the
+    // list; with nothing to go on, it reads as idle.
+    const reporting = agents();
+    const known = new Set(reporting.map((a) => a.address));
+    const spaceOfTab = new Map(sp.flatMap((s) => (s.tabs ?? []).map((tab) => [tab.id, s])));
+    const silent = panes()
+      .filter((p) => p.terminal && p.status == null && this.agentKeys.has(p.program?.key) && !known.has(p.terminal) && spaceOfTab.has(p.tab))
+      .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, space: spaceOfTab.get(p.tab).id, status: "idle", app: p.app, program: p.program, title: p.title, focused: p.focused, pinned: false }));
+    return { rawAgents: [...reporting, ...silent], spaceOfTab };
+  }
+
   render() {
     if (props()?.viewMenu) return this.renderViewMenu();
-    if (props()?.spaceMenu) return this.renderSpaceMenu();
+    if (props()?.shellMenu) return this.renderShellMenu();
     const t = theme();
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
@@ -943,7 +1121,16 @@ export default class Spaces extends View {
 
     // Agents per workspace, most urgent first, then most recently changed.
     const now = Date.now();
-    const list = agents();
+    const { rawAgents, spaceOfTab } = this.agentEntries(sp);
+    // Status and the shell popup must use the same association, including detached
+    // sessions whose jobs no longer carry the viewer terminal's address.
+    const jobPlacement = this.placeJobs(rawAgents, spaceOfTab);
+    const list = rawAgents.map(a => withShellState(a, this.shellReadings?.[a.address],
+      (jobPlacement.jobsOf.get(a.address) ?? []).map(job => ({ ...job, terminal: a.address })), this.jobsAt));
+    for (const w of sp) {
+      const mine = list.filter(a => a.space === w.id);
+      if (mine.length) w.status = mine.reduce((best, a) => (RANK[a.status] ?? 0) > (RANK[best] ?? 0) ? a.status : best, "idle");
+    }
     this.track(list, now);
     const order = new Map(sp.map((s, n) => [s.id, n]));
     const since = (a) => this.changed[a.address]?.at ?? 0;
@@ -956,6 +1143,7 @@ export default class Spaces extends View {
     const visibleAgents = mode === "workspaces" ? sorted : orderAgents(list, mode);
     setAgentOrder(visibleAgents.map((a) => a.address));
     this.ctx = {
+      ...jobPlacement,
       now, bySpace, mono: MONO(), all: terminals(), visibleAgents, prompts: latestPrompts(),
       spaceOf: new Map(sp.map(s => [s.id, s])),
       cwdOf: new Map(panes().map((p) => [p.pane, p.cwd ?? ""])),
@@ -971,7 +1159,7 @@ export default class Spaces extends View {
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
         // Personal: a hairline under the section header so it reads apart from the cards.
         .when(!collapsed && !this.listFolded, el => el.mx(0).pl(14).pr(8))
-        .when(!collapsed && !this.listFolded && mode === "workspaces", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
+        .when(!collapsed && !this.listFolded, el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
             this.listFolded = !this.listFolded;
@@ -990,7 +1178,6 @@ export default class Spaces extends View {
             .on_click(() => expandRail())
             .child(svg("mods/workspace-chrome/sidebar.svg").size(16))))
         .child(plus))
-      .when(!collapsed && !this.listFolded && mode !== "workspaces", el => el.child(this.strip(t)))
       .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));

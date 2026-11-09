@@ -2,11 +2,11 @@
 export const VIEW_MODES = [
   ['workspaces', 'Spaces', 'Group agents inside workspace cards'],
   ['agents', 'Agents', 'All agents in a stable list, with workspace labels'],
-  ['attention', 'Attention', 'Group by Needs you, Ready to review, Running and Idle'],
+  ['attention', 'Attention', 'Group by Needs you, Ready to review, Running, Waiting for shells and Idle'],
 ];
 export const viewMode = value => VIEW_MODES.some(([id]) => id === value) ? value : 'workspaces';
 const STATUS = [
-  ['blocked', 'Needs you'], ['done', 'Ready to review'], ['working', 'Running'], ['idle', 'Idle'],
+  ['blocked', 'Needs you'], ['done', 'Ready to review'], ['working', 'Running'], ['waiting', 'Waiting for shells'], ['idle', 'Idle'],
 ];
 export function orderAgents(list, mode) {
   if (mode === 'workspaces') return [...list];
