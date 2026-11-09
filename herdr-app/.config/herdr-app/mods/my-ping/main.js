@@ -1,6 +1,6 @@
-// Personal: a thumbs-up beside Claude Code's pings. Herdr's own `toast` mod draws the note in the
+// Personal: a thumbs-up beside agent pings. Herdr's own `toast` mod draws the note in the
 // bottom-right corner (it's shipped, so it can't be restyled for good); this mod watches the agents
-// and, when a Claude Code agent finishes while you weren't looking or needs you, pops the thumbs-up
+// and, when any agent finishes while you weren't looking or needs you, pops the thumbs-up
 // just left of that note for as long as the note shows.
 //
 // Three roles, one file:
@@ -18,8 +18,6 @@ const SHOW_MS = 6000;     // about as long as Herdr's note stays
 // Herdr's note, measured from a screenshot: 18px in from the right and bottom edges, ~374px wide.
 const TOAST = { right: 18, bottom: 18, width: 374, height: 78 };
 const GAP = 2;
-
-const isClaude = (a) => a.app === "claude-code" || /claude/i.test(a.program?.name ?? "");
 
 export default class Ping extends View {
   init(_p, cx) {
@@ -40,7 +38,7 @@ export default class Ping extends View {
     for (const a of agents()) {
       const was = this.seen.get(a.address);
       now.set(a.address, a.status);
-      if (was === undefined || was === a.status || !isClaude(a)) continue;
+      if (was === undefined || was === a.status) continue;
       if (a.status === "done" || (a.status === "blocked" && !(a.focused && window().active))) ping = true;
     }
     this.seen = now;

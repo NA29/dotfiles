@@ -54,6 +54,22 @@ function diffRows(lines) {
   });
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class Changes extends View {
   init(_props, cx) {
     this.files = []; this.rows = []; this.diffWidth = 0; this.message = ""; this.handle = cx.focus_handle();
@@ -200,7 +216,7 @@ export default class Changes extends View {
 
   render(cx) {
     if (key() !== this.context) this.refresh(cx);
-    const t = theme(), card = glass(t.background), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
+    const t = theme(), card = glass(lift(t, 0.1)), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     const statusColor = (st) => st === "A" ? t.ansi2 : st === "D" || st === "U" ? t.ansi1 : t.working;
     return v_flex().id("changes").size_full().min_h(0).p(6).gap(6).font_family(SANS).text_color(t.foreground).text_size(13).track_focus(this.handle)
@@ -208,30 +224,30 @@ export default class Changes extends View {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
       // Header card: title, file count, total +/−.
-      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(10).bg(card)
+      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 6)).bg(card)
         .child(div().flex_none().font_semibold().child("Changes"))
-        .child(div().flex_none().px(6).rounded(4).bg(tint(t.foreground, 0.06)).font_family(MONO).text_size(10.5).text_color(t.muted)
+        .child(div().flex_none().px(6).rounded(4).bg(tint(t.foreground, 0.06)).font_family(MONO).text_size(11).text_color(t.muted)
           .child(`${this.files.length} ${this.files.length === 1 ? "file" : "files"}`))
         .child(div().flex_1())
         .child(h_flex().flex_none().gap(6).font_family(MONO).text_size(11)
           .child(div().text_color(add ? t.ansi2 : t.dim).child(`+${add}`))
           .child(div().text_color(del ? t.ansi1 : t.dim).child(`−${del}`))))
       // Changed files.
-      .child(v_flex().id("changes-list").flex_none().h(Math.min(208, Math.max(40, this.files.length * 28 + 8))).rounded(10).bg(card).overflow_y_scrollbar().p(4).children(this.files.map((f) => {
+      .child(v_flex().id("changes-list").flex_none().h(Math.min(208, Math.max(40, this.files.length * 28 + 4))).rounded(concentric(ISLAND_R(), 6)).bg(card).overflow_y_scrollbar().p(2).children(this.files.map((f) => {
         const parts = f.path.split("/"), name = parts.pop(), open = this.open === f.path;
-        return h_flex().id(`change-${f.path}`).h(28).flex_none().px(8).gap(8).items_center().rounded(7).cursor_pointer()
-          .when(open, (e) => e.bg(tint(t.accent, 0.14))).when(!open, (e) => e.hover((s) => s.bg(tint(t.foreground, 0.05))))
+        return h_flex().id(`change-${f.path}`).h(28).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 8)).cursor_pointer()
+          .when(open, (e) => e.bg(tint(t.accent, selA(t)))).when(!open, (e) => e.hover((s) => s.bg(t.hover)))
           .on_click((_e, cx) => this.pick(f.path, cx))
-          .child(div().w(12).flex_none().font_family(MONO).text_size(10.5).text_color(statusColor(f.status)).child(f.status))
+          .child(div().w(12).flex_none().font_family(MONO).text_size(11).text_color(statusColor(f.status)).child(f.status))
           .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().text_color(open ? t.foreground : t.muted).child(name)))
-          .child(h_flex().flex_none().gap(6).font_family(MONO).text_size(10.5)
+          .child(h_flex().flex_none().gap(6).font_family(MONO).text_size(11)
             .when(f.add > 0, (e) => e.child(div().text_color(t.ansi2).child(`+${f.add}`)))
             .when(f.del > 0, (e) => e.child(div().text_color(t.ansi1).child(`−${f.del}`))));
       })).when(!this.files.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "Nothing to commit · working tree clean" : "No folder")))))
       .when(this.limited, el => el.child(div().px(10).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
       // The diff (an empty space when there's nothing to show).
       .when(!this.files.length, (e) => e.child(div().flex_1()))
-      .when(this.files.length > 0, (e) => e.child(div().flex_1().min_h(0).relative().rounded(10).overflow_hidden().bg(card).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+      .when(this.files.length > 0, (e) => e.child(div().flex_1().min_h(0).relative().rounded(concentric(ISLAND_R(), 6)).overflow_hidden().bg(card).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
         .child(div().id("changes-diff-x").size_full().overflow_x_scrollbar()
           .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list("changes-diff", this.rows.length, 20, (i) => String(i),
             (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).size_full())))
@@ -240,11 +256,11 @@ export default class Changes extends View {
           .child("Select a file to view its changes")))))
       .when(Boolean(this.note), (e) => e.child(div().px(10).text_size(11).text_color(t.ansi1).child(this.note)))
       // Commit: borderless field (accent ring only while typing) and a quiet button.
-      .child(h_flex().flex_none().p(4).gap(6).rounded(10).bg(card)
-        .child(div().id("commit-message").flex_1().min_w(0).h(30).px(10).flex().items_center().rounded(7).bg(t.background)
+      .child(h_flex().flex_none().p(2).gap(6).rounded(concentric(ISLAND_R(), 6)).bg(card)
+        .child(div().id("commit-message").flex_1().min_w(0).h(30).px(10).flex().items_center().rounded(concentric(ISLAND_R(), 8)).bg(t.background)
           .border_1().border_color(this.typing ? t.accent : tint(t.background, 0)).cursor_text()
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).h_full().text_size(12).text_color(t.foreground)))
-        .child(div().id("commit").h(30).px(14).flex().items_center().rounded(7).text_size(12).font_semibold()
+        .child(div().id("commit").h(30).px(14).flex().items_center().rounded(concentric(ISLAND_R(), 8)).text_size(12).font_semibold()
           .bg(enabled ? tint(t.foreground, 0.10) : tint(t.foreground, 0.04)).text_color(enabled ? t.foreground : t.dim)
           .when(enabled, (e) => e.cursor_pointer().hover((s) => s.bg(tint(t.foreground, 0.16))))
           .on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit")));

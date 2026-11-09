@@ -64,6 +64,24 @@ function find(node, id) {
   return null;
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
+const FOCUSED = () => (sqShared("rice") ?? {})["look.style"] !== "islands";
+
 export default class Tabs extends View {
   init() {
     this.pressed = null;
@@ -103,7 +121,7 @@ export default class Tabs extends View {
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
     const stop = (_e, cx) => cx.stop_propagation();
-    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
+    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(concentric(ISLAND_R(), 7)).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
     const ps = panes(), homeDir = home();
     const mono = "Geist Mono";
@@ -114,12 +132,12 @@ export default class Tabs extends View {
       // Personal: every tab is a small outlined box (the border was always there, just
       // invisible, so nothing gets wider); the shown one is outlined in the accent.
       // Sleek: a borderless pill in the card color; the shown tab is filled (like a selected agent).
-      return h_flex().id(`tab-${c.id}`).h(28).px(10).gap(7).rounded(8).items_center().flex_none().text_size(12)
+      return h_flex().id(`tab-${c.id}`).h(28).px(10).gap(8).rounded(concentric(ISLAND_R(), 6)).items_center().flex_none().text_size(12)
         // Option 1: only the shown tab is a pill (the card colour washed with the accent, like the
         // current workspace card); the others are bare and get a soft pill on hover.
-        .when(c.active, el => el.bg(glass(wash(t.background, t.accent, 0.22))))
+        .when(c.active, el => el.bg(glass(wash(t.background, t.accent, selA(t)))))
         .text_color(c.active ? t.foreground : t.muted)
-        .when(!c.active, el => el.hover(s => s.bg(glass(t.background)).text_color(t.foreground)))
+        .when(!c.active, el => el.hover(s => s.bg(FOCUSED() ? t.hover : glass(lift(t, 0.13))).text_color(t.foreground)))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -129,7 +147,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         // The number stays as a hint: ⌘1–⌘9 go by it.
-        .when((shared("rice") ?? {})["tabs.numbers"] !== false, el => el.child(div().flex_none().font_family(mono).text_size(10.5).text_color(c.active ? t.accent : t.dim).child(String(c.index))))
+        .when((shared("rice") ?? {})["tabs.numbers"] !== false, el => el.child(div().flex_none().font_family(mono).text_size(11).text_color(c.active ? t.accent : t.dim).child(String(c.index))))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
@@ -138,8 +156,8 @@ export default class Tabs extends View {
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
-      ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
-      : 10;
+      ? Math.max(FOCUSED() ? 0 : 6, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
+      : (FOCUSED() ? 0 : 6);
     const panel = find(root, "panel"), body = find(root, "panel-body");
     // Personal: Context (my-context) is always offered, after Files and Changes.
     const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "context"];
@@ -148,15 +166,15 @@ export default class Tabs extends View {
     // boxes: a filled pill holding both, the open one raised inside it with an accent icon.
     const panelButton = (id, label, icon) => {
       const on = panel && !panel.hidden && body?.active === id;
-      return h_flex().id(`panel-${id}`).h(22).px(8).gap(5).flex_none().items_center().rounded(4)
+      return h_flex().id(`panel-${id}`).h(22).px(8).gap(6).flex_none().items_center().rounded(concentric(ISLAND_R(), 9))
         .text_size(12).text_color(on ? t.foreground : t.muted)
-        .when(on, s => s.bg(glass(t.selected)))
+        .when(on, s => s.bg(glass(wash(t.background, t.accent, selA(t)))))
         .when(!on, s => s.hover(h => h.text_color(t.foreground)))
         .on_mouse_down("left", stop)
         .on_click(() => {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(13).text_color(on ? t.accent : t.dim)).child(label);
+        }).child(svg(icon).size(14).text_color(on ? t.accent : t.dim)).child(label);
     };
     const panels = ["files", "changes", "context"].filter((p) => enabled.includes(p));
     const PANEL = { files: ["Files", "mods/files/file.svg"], changes: ["Changes", "mods/changes/changes.svg"], context: ["Context", "mods/my-context/context.svg"] };
@@ -166,18 +184,18 @@ export default class Tabs extends View {
       ...(i > 0 && openPanel !== p && openPanel !== panels[i - 1] ? [div().w(1).h(12).flex_none().bg(t.border)] : []),
       panelButton(p, PANEL[p][0], PANEL[p][1])]);
     // Sleek: no own background or border; the layout block is a floating rounded card.
-    return h_flex().size_full().min_w(0).px(6).pl(lightsPadding).gap(4).items_center()
+    return h_flex().size_full().min_w(0).px(6).pl(lightsPadding).when(FOCUSED(), (el) => el.pr(4)).gap(4).items_center()
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
-      .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children(shown.map(item)))
+      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
       .when(panels.length > 0, el => el
         // A thin divider sets the toggle apart from the tabs.
         .child(div().w(1).h(16).mx(6).flex_none().bg(t.border))
-        .child(h_flex().id("panel-toggle").flex_none().h(28).p(3).gap(2).items_center().rounded(8).bg(glass(t.background))
+        .child(h_flex().id("panel-toggle").flex_none().h(28).p(3).gap(2).items_center().rounded(concentric(ISLAND_R(), 6)).when(!FOCUSED(), (el) => el.bg(glass(lift(t, 0.13))))
           .children(toggleItems)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/sleek-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/sleek-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
-        .child(button("close-window", w.platform === "windows" ? svg("mods/sleek-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
+        .child(button("close-window", w.platform === "windows" ? svg("mods/sleek-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(14), () => run("window.close"))));
   }
 }

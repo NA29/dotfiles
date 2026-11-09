@@ -36,6 +36,22 @@ const glass = (c) => {
 const isClaude = (a) => a && (a.app === "claude-code" || /claude/i.test(a.program?.name ?? ""));
 const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class Context extends View {
   init(_props, cx) {
     this.target = null;      // the Claude terminal shown
@@ -78,7 +94,7 @@ export default class Context extends View {
   }
 
   render(cx) {
-    const t = theme(), card = glass(t.background);
+    const t = theme(), card = glass(lift(t, 0.1));
     const target = this.pick();
     if (target !== this.target) {
       this.target = target; this.data = null; this.openFile = null; this.openSkill = null;
@@ -98,7 +114,7 @@ export default class Context extends View {
       .text_size(11).font_semibold().text_color(t.muted)
       .child(text).when(count != null, (el) => el.child(div().font_family(MONO).font_weight(400).text_color(t.dim).child(String(count))));
     const pill = (text, color = t.muted, wash = tint(t.foreground, 0.06)) => div().flex_none().h(18).px(6).flex().items_center()
-      .rounded(4).bg(wash).font_family(MONO).text_size(10.5).text_color(color).child(text);
+      .rounded(4).bg(wash).font_family(MONO).text_size(11).text_color(color).child(text);
     const note = (text) => div().px(10).text_size(11).text_color(t.dim).child(text);
 
     const message = !target ? "Focus a Claude Code pane to see what it has in context."
@@ -113,16 +129,16 @@ export default class Context extends View {
       const open = this.openFile === f.path;
       const parts = f.path.split("/"), name = parts.pop();
       return v_flex().flex_none()
-        .child(h_flex().id(`file-${i}`).h(30).flex_none().px(8).gap(8).items_center().rounded(7).cursor_pointer()
-          .when(open, (e) => e.bg(tint(t.accent, 0.14))).when(!open, (e) => e.hover((s) => s.bg(tint(t.foreground, 0.05))))
+        .child(h_flex().id(`file-${i}`).h(30).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 8)).cursor_pointer()
+          .when(open, (e) => e.bg(tint(t.accent, selA(t)))).when(!open, (e) => e.hover((s) => s.bg(t.hover)))
           .on_click((_e, cx) => { this.openFile = open ? null : f.path; cx.notify(); })
           .child(pill(f.type || "file"))
           .child(h_flex().flex_1().min_w(0)
             .child(div().min_w(0).truncate().text_color(t.dim).child(parts.length ? parts.join("/") + "/" : ""))
             .child(div().flex_none().text_color(open ? t.foreground : t.muted).child(name)))
-          .child(div().flex_none().font_family(MONO).text_size(10.5).text_color(t.dim).child(plural(f.lines, "line")))
+          .child(div().flex_none().font_family(MONO).text_size(11).text_color(t.dim).child(plural(f.lines, "line")))
           .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim)))
-        .when(open, (el) => el.child(div().id(`file-body-${i}`).mx(4).mt(4).mb(6).p(12).max_h(320).rounded(8)
+        .when(open, (el) => el.child(div().id(`file-body-${i}`).mt(4).mb(6).p(12).max_h(320).rounded(concentric(ISLAND_R(), 8))
           .bg(tint(t.foreground, 0.03)).overflow_y_scrollbar().text_size(12).text_color(t.muted)
           .child(TextView.markdown(`md-${i}`, f.preview + (f.chars > f.preview.length ? "\n\n…" : "")).selectable(true))));
     };
@@ -131,58 +147,58 @@ export default class Context extends View {
     const skillRow = (s, i) => {
       const open = this.openSkill === s.name;
       const [scope, short] = s.name.includes(":") ? [s.name.slice(0, s.name.lastIndexOf(":") + 1), s.name.slice(s.name.lastIndexOf(":") + 1)] : ["", s.name];
-      return v_flex().id(`skill-${i}`).flex_none().px(8).py(6).gap(3).rounded(7).cursor_pointer()
-        .when(open, (e) => e.bg(tint(t.foreground, 0.05))).when(!open, (e) => e.hover((h) => h.bg(tint(t.foreground, 0.04))))
+      return v_flex().id(`skill-${i}`).flex_none().px(10).py(6).gap(4).rounded(concentric(ISLAND_R(), 8)).cursor_pointer()
+        .when(open, (e) => e.bg(tint(t.foreground, 0.05))).when(!open, (e) => e.hover((h) => h.bg(t.hover)))
         .on_click((_e, cx) => { this.openSkill = open ? null : s.name; cx.notify(); })
         .child(h_flex().gap(8).items_center()
           .child(s.loaded ? div().size(7).flex_none().rounded(4).bg(t.done)
                           : div().size(7).flex_none().rounded(4).border(1.5).border_color(t.dim))
-          .child(h_flex().flex_1().min_w(0).font_family(MONO).text_size(12)
-            .when(Boolean(scope), (el) => el.child(div().flex_none().text_color(t.dim).child(scope)))
-            .child(div().min_w(0).truncate().text_color(s.loaded ? t.foreground : t.muted).child(short)))
-          .when(Boolean(s.loaded), (el) => el.child(pill(`loaded · ${s.loaded === "you" ? "by you" : "by Claude"}`, t.done, tint(t.done, 0.14)))))
+          .child(h_flex().flex_1().min_w(0).overflow_hidden().font_family(MONO).text_size(12)
+            .when(Boolean(scope), (el) => el.child(div().flex_shrink_1().min_w(0).truncate().text_color(t.dim).child(scope)))
+            .child(div().flex_none().text_color(s.loaded ? t.foreground : t.muted).child(short)))
+          .when(Boolean(s.loaded), (el) => el.child(pill(s.loaded === "you" ? "Loaded by you" : "Loaded", t.done, tint(t.done, 0.14)))))
         .when(Boolean(s.description), (el) => el.child(div().pl(15).text_size(11).text_color(t.dim)
           .when(!open, (d) => d.truncate()).child(s.description)));
     };
 
     return v_flex().id("context").size_full().min_h(0).p(6).gap(6).font_family(SANS).text_color(t.foreground).text_size(13)
       // Header card: title, which session, totals.
-      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(10).bg(card)
+      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 6)).bg(card)
         .child(div().flex_none().font_semibold().child("Context"))
         // Which session: its name (Claude's /rename title), shortened when the panel is narrow.
         .when(Boolean(d?.title || target), (el) => el.child(div().min_w(0).h(18).px(6).flex().items_center().rounded(4)
-          .bg(tint(t.foreground, 0.06)).font_family(MONO).text_size(10.5).text_color(t.muted)
+          .bg(tint(t.foreground, 0.06)).font_family(MONO).text_size(11).text_color(t.muted)
           .child(div().min_w(0).truncate().child(d?.title || target))))
         .child(div().flex_1()))
       .when(Boolean(message), (el) => el.child(div().px(10).py(6).text_size(12).text_color(t.dim).child(message)))
       .when(!message, (el) => el.child(v_flex().id("context-body").flex_1().min_h(0).gap(6).overflow_y_scrollbar()
         // Instructions
         .child(label("Instructions", files.length))
-        .child(v_flex().flex_none().p(4).gap(2).rounded(10).bg(card)
+        .child(v_flex().flex_none().p(2).gap(2).rounded(concentric(ISLAND_R(), 6)).bg(card)
           .children(files.map(fileRow))
-          .when(!files.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No CLAUDE.md files loaded."))))
+          .when(!files.length, (e) => e.child(div().px(10).py(6).text_size(12).text_color(t.dim).child("No CLAUDE.md files loaded."))))
         .child(note("Read in whole at the start of the session and kept for every turn."))
         // Skills
         .child(h_flex().mt(6).flex_none().items_center()
           .child(label("Skills", words.length ? `${shown.length} of ${skills.length}` : skills.length))
           .child(div().flex_1())
-          .child(h_flex().pr(10).gap(10).flex_none().font_family(MONO).text_size(10.5).text_color(t.dim)
-            .child(h_flex().gap(5).items_center().child(div().size(6).rounded(3).bg(t.done)).child(`${loaded.length} loaded`))
-            .child(h_flex().gap(5).items_center().child(div().size(6).rounded(3).border(1.2).border_color(t.dim)).child(`${skills.length - loaded.length} listed`))))
+          .child(h_flex().pr(10).gap(10).flex_none().font_family(MONO).text_size(11).text_color(t.dim)
+            .child(h_flex().gap(6).items_center().child(div().size(6).rounded(3).bg(t.done)).child(`${loaded.length} loaded`))
+            .child(h_flex().gap(6).items_center().child(div().size(6).rounded(3).border(1.2).border_color(t.dim)).child(`${skills.length - loaded.length} listed`))))
         // Search field: a filled bar like the cards; Esc or × clears it.
-        .when(skills.length > 0, (el) => el.child(h_flex().id("skill-search").h(32).flex_none().px(10).gap(8).items_center().rounded(10).bg(card)
+        .when(skills.length > 0, (el) => el.child(h_flex().id("skill-search").h(32).flex_none().px(10).gap(8).items_center().rounded(concentric(ISLAND_R(), 6)).bg(card)
           .on_key_down((e, cx) => {
             if (e.key === "escape" && this.query) { this.search.set_value(""); this.query = ""; cx.stop_propagation(); cx.notify(); }
           })
-          .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(words.length ? t.foreground : t.dim))
+          .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none().text_color(words.length ? t.foreground : t.dim))
           .child(Input.new(this.search).flex_1().h_full().text_size(12).text_color(t.foreground))
           .when(Boolean(this.query), (e) => e.child(div().id("skill-search-clear").size(18).flex_none().flex().items_center().justify_center()
-            .rounded(4).cursor_pointer().text_color(t.dim).hover((h) => h.bg(tint(t.foreground, 0.06)).text_color(t.foreground))
+            .rounded(4).cursor_pointer().text_color(t.dim).hover((h) => h.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { this.search.set_value(""); this.query = ""; cx.notify(); })
             .child(svg("mods/workspace-chrome/x.svg").size(12))))))
-        .child(v_flex().flex_none().p(4).gap(1).rounded(10).bg(card).children(shown.map(skillRow))
-          .when(!skills.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No skills in this session.")))
-          .when(skills.length > 0 && !shown.length, (e) => e.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(`No skills match “${this.query.trim()}”.`))))
+        .child(v_flex().flex_none().p(2).gap(1).rounded(concentric(ISLAND_R(), 6)).bg(card).children(shown.map(skillRow))
+          .when(!skills.length, (e) => e.child(div().px(10).py(6).text_size(12).text_color(t.dim).child("No skills in this session.")))
+          .when(skills.length > 0 && !shown.length, (e) => e.child(div().px(10).py(6).text_size(12).text_color(t.dim).child(`No skills match “${this.query.trim()}”.`))))
         .child(note("Listed: Claude sees only the name and description. Loaded: the skill was used, so its full instructions are in context."))
         .child(div().h(6).flex_none())));
   }

@@ -92,6 +92,22 @@ function runsFromEvents(events) {
   return out.sort((a, b) => b.start - a.start);
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class Activity extends View {
   init(_props, cx) {
     // Any popup copy is the log (and never records): the sidebar block has no overlay.
@@ -233,7 +249,7 @@ export default class Activity extends View {
     if (status === "needs you") return div().w(8).flex_none().font_bold().text_color(t.blocked).child("!");
     if (status === "finished") return div().size(6).mx(1).flex_none().rounded(3).bg(t.done);
     if (status === "working") return svg("mods/workspace-chrome/spinner.svg").size(9).flex_none().text_color(t.working).spin(900);
-    return div().w(8).flex_none().text_color(t.dim).child("×");
+    return div().w(8).flex_none().text_color(t.dim).child(svg("mods/workspace-chrome/x.svg").size(8));
   }
 
   tone(t, status) {
@@ -241,9 +257,11 @@ export default class Activity extends View {
   }
 
   pill(t, status) {
-    const c = this.tone(t, status);
-    return div().flex_none().h(17).px(7).flex().items_center().rounded(9).font_family(SANS).text_size(10.5)
-      .bg(tint(c, 0.14)).text_color(c).child(status);
+    // Colour is for what needs attention; a finished or closed run is a neutral note.
+    const quiet = status === "finished" || status === "closed";
+    const c = quiet ? t.muted : this.tone(t, status);
+    return div().flex_none().h(18).px(8).flex().items_center().rounded(9).font_family(SANS).text_size(11)
+      .bg(quiet ? tint(t.foreground, 0.10) : tint(c, 0.16)).text_color(c).child(status.charAt(0).toUpperCase() + status.slice(1));
   }
 
   openLog() {
@@ -252,18 +270,11 @@ export default class Activity extends View {
 
   // ---- the sidebar block ------------------------------------------------------------
   // Narrow sidebar: the latest few runs as a mark and the time; click opens the log.
+  // Folded sidebar: only navigation stays. Activity is one click away from the expanded view or Ctrl+A a.
   rail(t) {
-    const shown = this.runs().slice(0, 3);
-    fit(layout, run, "activity", 8 + 8 + Math.max(1, shown.length) * 22 + 4);
-    return v_flex().id("root").size_full().min_h(0).px(6).pt(8).font_family(MONO).text_size(10.5)
-      .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } })
-      .child(v_flex().id("act-rail").w_full().py(4).rounded(10).bg(glass(t.background)).cursor_pointer().tooltip("Activity: open the log")
-        .hover((h) => h.bg(tint(t.foreground, 0.04)))
-        .on_click(() => this.openLog())
-        .children(shown.length ? shown.map((r, i) => h_flex().id(`rail-act-${i}`).h(22).gap(5).items_center().justify_center()
-          .child(this.mark(t, r.status))
-          .child(div().text_color(t.dim).child(clock(r.start))))
-          : [div().h(22).flex().items_center().justify_center().text_color(t.dim).child("—")]));
+    fit(layout, run, "activity", 1);
+    return div().id("root").size_full()
+      .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } });
   }
 
   sidebar(t) {
@@ -278,29 +289,29 @@ export default class Activity extends View {
     };
     fit(layout, run, "activity", 34 + (this.open ? 2 + Math.max(1, shown.length) * ROW + (all.length ? 28 : 0) + 8 : 0));
     const latest = all[0];
-    const footer = h_flex().id("act-all").h(26).mt(2).mx(4).px(8).gap(6).items_center().justify_center().cursor_pointer()
-      .rounded(6).text_color(t.dim)
-      .hover((h) => h.bg(tint(t.foreground, 0.05)).text_color(t.foreground))
+    const footer = h_flex().id("act-all").h(26).mt(2).px(8).gap(6).items_center().justify_center().cursor_pointer()
+      .rounded(concentric(SECTION_R(), 0)).text_color(t.dim)
+      .hover((h) => h.bg(t.hover).text_color(t.foreground))
       .on_click(() => this.openLog())
-      .child(div().font_family(SANS).child(`view all ${all.length} run${all.length === 1 ? "" : "s"}`))
-      .child(div().child("›"));
+      .child(div().font_family(SANS).child(`View all ${all.length} run${all.length === 1 ? "" : "s"}`))
+      .child(svg("mods/workspace-chrome/chevron-right.svg").size(12));
     const rows = shown.length
-      ? shown.map((r, i) => h_flex().id(`act-${i}`).h(ROW).mx(4).px(6).gap(8).items_center().rounded(6)
-          .when(live.has(r.address), (el) => el.cursor_pointer().hover((h) => h.bg(tint(t.foreground, 0.05)))
+      ? shown.map((r, i) => h_flex().id(`act-${i}`).h(ROW).px(14).gap(8).items_center().rounded(concentric(SECTION_R(), 0))
+          .when(live.has(r.address), (el) => el.cursor_pointer().hover((h) => h.bg(t.hover))
             .on_click(() => run("pane.focus", { pane: r.pane })))
           .child(div().flex_none().text_color(t.dim).child(clock(r.start)))
           .child(h_flex().w(10).flex_none().justify_center().child(this.mark(t, r.status)))
           .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12)
             .text_color(live.has(r.address) ? t.foreground : t.muted).child(this.titleOf(r)))
           .child(this.pill(t, r.status))
-          .when(Boolean(took(r.took)), (el) => el.child(div().flex_none().text_color(t.dim).child(took(r.took)))))
-      : [div().h(ROW).px(10).flex().items_center().font_family(SANS).text_color(t.dim).child("quiet so far")];
+          .child(div().w(28).flex_none().text_right().text_color(t.dim).child(took(r.took) || "")))
+      : [div().h(ROW).px(14).flex().items_center().font_family(SANS).text_color(t.dim).child("No runs yet")];
     return v_flex().id("root").size_full().min_h(0).font_family(MONO).text_size(11)
       .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } })
       .child(box(t, {
         id: "activity", title: "activity", open: this.open, onToggle: toggle,
         extra: [],
-        summary: latest ? [h_flex().min_w(0).gap(5).items_center()
+        summary: latest ? [h_flex().min_w(0).gap(6).items_center()
           .child(this.mark(t, latest.status))
           .child(div().min_w(0).max_w(110).truncate().font_family(SANS).text_color(t.muted).child(this.titleOf(latest)))
           .child(this.pill(t, latest.status))] : [],
@@ -310,8 +321,8 @@ export default class Activity extends View {
 
   // ---- the full log (dialog) ----------------------------------------------------------
   cap(t, text) {
-    return div().flex_none().px(6).h(20).flex().items_center().rounded(5).bg(tint(t.foreground, 0.07))
-      .font_family(MONO).text_size(10.5).text_color(t.muted).child(text);
+    return div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
+      .font_family(MONO).text_size(11).text_color(t.muted).child(text);
   }
 
   // y: copy the selected run's prompt, and say what happened (a green or red pill in the footer).
@@ -344,26 +355,26 @@ export default class Activity extends View {
     const by = new Map();
     for (const r of runs) {
       const k = (r.program ?? r.app ?? "agent").toLowerCase();
-      const cur = by.get(k) ?? { ms: 0, n: 0, tile: r.tile };
+      const cur = by.get(k) ?? { ms: 0, n: 0, tile: r.tile, name: r.program ?? r.app ?? "Agent" };
       cur.ms += spent(r); cur.n += 1; by.set(k, cur);
     }
-    const palette = [t.ansi3, t.ansi4, t.ansi6, t.ansi5, t.ansi2, t.ansi1];
-    const share = [...by.entries()].sort((a, b) => b[1].ms - a[1].ms).map(([k, v], i) => ({ k, ...v, color: palette[i % palette.length] }));
-    const stat = (value, label, color = t.foreground) => v_flex().flex_1().min_w(0).gap(2).px(14).py(10).rounded(10).bg(t.background)
+    const palette = [t.ansi4, t.ansi5, t.ansi6];   // no gold, red or green: those mean a status
+    const share = [...by.entries()].sort((a, b) => b[1].ms - a[1].ms).map(([k, v], i) => ({ k, ...v, color: /claude/.test(k) ? "#d97757" : /codex/.test(k) ? t.foreground : palette[i % palette.length] }));
+    const stat = (value, label, color = t.foreground) => v_flex().flex_1().min_w(0).gap(2).px(14).py(10).rounded(6).bg(tint(t.foreground, 0.06))
       .child(div().font_family(MONO).text_size(18).font_semibold().text_color(color).child(value))
-      .child(div().font_family(SANS).text_size(11.5).text_color(t.dim).child(label));
+      .child(div().font_family(SANS).text_size(12).text_color(t.dim).child(label));
     return v_flex().gap(8)
       .child(h_flex().gap(8)
-        .child(stat(String(runs.length), runs.length === 1 ? "run today" : "runs today"))
-        .child(stat(took(total) || "0s", "agent time"))
-        .child(stat(String(needs), needs === 1 ? "time you were needed" : "times you were needed", needs ? t.blocked : t.foreground)))
-      .when(share.length > 0 && total > 0, (el) => el.child(v_flex().gap(6).px(14).py(10).rounded(10).bg(t.background)
+        .child(stat(String(runs.length), runs.length === 1 ? "Run today" : "Runs today"))
+        .child(stat(took(total) || "0s", "Agent time"))
+        .child(stat(String(needs), needs === 1 ? "Time you were needed" : "Times you were needed", needs ? t.blocked : t.foreground)))
+      .when(share.length > 0 && total > 0, (el) => el.child(v_flex().gap(6).px(14).py(10).rounded(6).bg(tint(t.foreground, 0.06))
         .child(h_flex().w_full().h(6).rounded(3).overflow_hidden().gap(2)
           .children(share.map((s) => div().h_full().rounded(3).bg(s.color).w(`${Math.max(3, (s.ms / total) * 100)}%`))))
-        .child(h_flex().gap(14).flex_wrap().font_family(SANS).text_size(11.5).text_color(t.muted)
+        .child(h_flex().gap(14).flex_wrap().font_family(SANS).text_size(12).text_color(t.muted)
           .children(share.map((s) => h_flex().gap(6).items_center()
             .child(div().size(7).rounded(4).bg(s.color))
-            .child(s.k)
+            .child(s.name)
             .child(div().font_family(MONO).text_color(t.dim).child(`${Math.round((s.ms / total) * 100)}% · ${s.n}`)))))));
   }
 
@@ -377,37 +388,37 @@ export default class Activity extends View {
       const cut = all.slice(0, lines).join("\n");
       return v_flex().gap(4)
         .child(div().font_family(SANS).text_size(11).font_semibold().text_color(t.dim).child(label))
-        .child(div().w_full().font_family(SANS).text_size(12.5).text_color(t.foreground)
+        .child(div().w_full().font_family(SANS).text_size(13).text_color(t.foreground)
           .child(cut.length > 1400 ? cut.slice(0, 1400) + "…" : all.length > lines ? cut + "\n…" : cut));
     };
-    return v_flex().id(`run-${r.id}`).w_full().px(10).py(8).gap(4).rounded(8).cursor_pointer()
-      .when(selected, (el) => el.bg(tint(t.accent, 0.14)))
-      .when(!selected, (el) => el.hover((h) => h.bg(tint(t.foreground, 0.04))))
+    return v_flex().id(`run-${r.id}`).w_full().px(10).py(8).gap(4).rounded(6).cursor_pointer()
+      .when(selected, (el) => el.bg(tint(t.accent, selA(t))))
+      .when(!selected, (el) => el.hover((h) => h.bg(t.hover)))
       .on_click((_e, cx) => { this.expanded = this.expanded === i ? null : i; this.at = i; cx.notify(); })
       .child(h_flex().gap(10).items_center()
-        .child(div().w(38).flex_none().font_family(MONO).text_size(11.5).text_color(t.dim).child(clock(r.start)))
+        .child(div().w(38).flex_none().font_family(MONO).text_size(12).text_color(t.dim).child(clock(r.start)))
         .child(h_flex().w(10).flex_none().justify_center().child(this.mark(t, r.status)))
         .child(div().w(16).flex_none().flex().justify_center().when(Boolean(pic), (el) => el.child(pic)))
         .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13)
           .text_color(here ? t.foreground : t.muted).child(title))
-        .when(Boolean(r.space), (el) => el.child(h_flex().flex_shrink_1().min_w(0).gap(4).items_center().font_family(SANS).text_size(11.5).text_color(t.dim)
+        .when(Boolean(r.space), (el) => el.child(h_flex().flex_none().max_w(130).gap(4).items_center().font_family(SANS).text_size(12).text_color(t.dim)
           .child(div().flex_none().child("·"))
           .child(div().min_w(0).truncate().font_semibold().child(r.space))
           .when(r.tab != null, (x) => x.child(div().flex_none().font_family(MONO).child(`› ${r.tab}`)))))
         .child(div().flex_1())
-        .when((r.needs ?? 0) > 0 && r.status !== "needs you", (el) => el.child(div().flex_none().font_family(MONO).text_size(10.5).text_color(t.blocked).child(`!${r.needs}`)))
+        .when((r.needs ?? 0) > 0 && r.status !== "needs you", (el) => el.child(div().flex_none().font_family(MONO).text_size(11).text_color(t.blocked).child(`!${r.needs}`)))
         .child(this.pill(t, r.status))
-        .child(div().w(44).flex_none().text_right().font_family(MONO).text_size(11.5).text_color(t.dim)
+        .child(div().w(44).flex_none().text_right().font_family(MONO).text_size(12).text_color(t.dim)
           .child(took(r.took ?? (OPEN(r) ? Date.now() - r.start : 0)))))
       .when(!expanded && Boolean(prompt), (el) => el.child(h_flex().pl(84).gap(6).min_w(0)
-        .child(div().flex_none().font_family(MONO).text_size(11.5).text_color(t.accent).child("›"))
+        .child(div().flex_none().font_family(MONO).text_size(12).text_color(t.accent).child("›"))
         .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).text_color(t.muted).child(prompt))))
-      .when(expanded, (el) => el.child(v_flex().ml(84).mt(4).gap(12).p(12).rounded(8).bg(t.background)
+      .when(expanded, (el) => el.child(v_flex().ml(84).mt(4).gap(12).p(12).rounded(4).bg(tint(t.foreground, 0.06))
         .child(r.prompt ? block("You", r.prompt, 10) : div().font_family(SANS).text_size(12).text_color(t.dim).child("No prompt recorded for this run."))
         .when(Boolean(r.reply), (x) => x.child(block("Reply", r.reply, 12)))
         .child(h_flex().gap(14).items_center().font_family(SANS).text_size(11).text_color(t.dim)
-          .when(here, (x) => x.child(h_flex().gap(5).items_center().child(this.cap(t, "l")).child("open tab")))
-          .when(Boolean(r.prompt), (x) => x.child(h_flex().gap(5).items_center().child(this.cap(t, "y")).child("copy prompt")))
+          .when(here, (x) => x.child(h_flex().gap(6).items_center().child(this.cap(t, "l")).child("Open tab")))
+          .when(Boolean(r.prompt), (x) => x.child(h_flex().gap(6).items_center().child(this.cap(t, "y")).child("Copy prompt")))
           .child(div().font_family(MONO).child(`${(r.program ?? r.app ?? "agent").toLowerCase()}${r.end ? ` · ${clock(r.start)}–${clock(r.end)}` : ""}`)))));
   }
 
@@ -456,12 +467,12 @@ export default class Activity extends View {
 
     const chip = (k) => {
       const on = this.filter === k;
-      return h_flex().id(`flt-${k}`).h(26).px(10).gap(6).items_center().rounded(8).cursor_pointer().font_family(SANS).text_size(12)
-        .bg(on ? tint(t.accent, 0.16) : t.background).text_color(on ? t.foreground : t.muted)
+      return h_flex().id(`flt-${k}`).h(26).px(10).gap(6).items_center().rounded(6).cursor_pointer().font_family(SANS).text_size(12)
+        .bg(on ? tint(t.accent, selA(t)) : tint(t.foreground, 0.08)).text_color(on ? t.foreground : t.muted)
         .hover((h) => h.text_color(t.foreground))
         .on_click((_e, cx) => { this.filter = k; this.at = 0; this.top = 0; this.expanded = null; cx.notify(); })
         .when(k !== "all", (el) => el.child(this.mark(t, k)))
-        .child(k)
+        .child(k.charAt(0).toUpperCase() + k.slice(1))
         .child(div().font_family(MONO).text_size(11).text_color(t.dim).child(String(count(k))));
     };
 
@@ -472,7 +483,7 @@ export default class Activity extends View {
       const d = dayOf(r.start);
       if (d !== day) {
         day = d;
-        items.push(div().h(24).px(10).pt(4).flex().items_center().font_family(SANS).text_size(11.5).font_semibold().text_color(t.dim).child(d));
+        items.push(div().h(24).px(10).pt(4).flex().items_center().font_family(SANS).text_size(12).font_semibold().text_color(t.dim).child(d));
       }
       items.push(this.entry(t, r, i, i === this.at, i === this.expanded, live));
     }
@@ -512,20 +523,20 @@ export default class Activity extends View {
         else return;
         cx.stop_propagation();
       })
-      .child(v_flex().size_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
-        .bg(t.chrome).text_color(t.foreground).p(8).gap(8)
+      .child(v_flex().size_full().rounded(12).border_1().border_color(t.border).overflow_hidden()
+        .bg(t.chrome).text_color(t.foreground).p(5).gap(8)
         // Header: the mode block (lualine-style, like Go to), the search field, clear.
-        .child(h_flex().h(46).flex_none().px(12).gap(10).items_center().rounded(10).bg(t.background)
-          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family(MONO).text_size(10.5).font_bold()
-            .bg(this.mode === "insert" ? t.accent : t.ansi4).text_color(t.background).child(this.mode === "insert" ? "SEARCH" : "ACTIVITY"))
-          .child(svg("mods/workspace-chrome/search.svg").size(15).flex_none().text_color(t.dim))
+        .child(h_flex().h(46).flex_none().px(12).gap(10).items_center().rounded(6).bg(tint(t.foreground, 0.06))
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(4).font_family(MONO).text_size(11).font_bold()
+            .bg(this.mode === "insert" ? t.accent : t.muted).text_color(t.background).child(this.mode === "insert" ? "SEARCH" : "ACTIVITY"))
+          .child(svg("mods/workspace-chrome/search.svg").size(16).flex_none().text_color(t.dim))
           .child(Input.new(this.input).flex_1().h_full().text_size(14).text_color(t.foreground))
-          .child(div().id("act-clear").flex_none().h(24).px(9).flex().items_center().rounded(6).font_family(SANS).text_size(12)
+          .child(div().id("act-clear").flex_none().h(24).px(10).flex().items_center().rounded(4).font_family(SANS).text_size(12)
             .bg(tint(t.foreground, 0.06)).text_color(t.muted).cursor_pointer()
             .when(all.length === 0, (el) => el.opacity(0.4))
             .hover((h) => h.bg(tint(t.blocked, 0.16)).text_color(t.blocked))
             .on_click((_e, cx) => { if (all.length) { this.confirming = true; this.handle.focus(); cx.notify(); } })
-            .child("clear")))
+            .child("Clear")))
         .child(this.summary(t, all))
         .child(h_flex().gap(6).flex_wrap().children(["all", ...STATES].map(chip)))
         .child(this.confirming ? this.confirmPanel(t, all.length)
@@ -558,19 +569,19 @@ export default class Activity extends View {
         // Footer: the keys, like Go to's.
         .child(h_flex().h(30).flex_none().px(8).gap(14).items_center().font_family(SANS).text_size(11).text_color(t.dim)
           .when(this.mode === "normal", (el) => el
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "j k")).child("move"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "↵")).child("expand"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "l")).child("open tab"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "y")).child("copy prompt"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "/")).child("search"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "q")).child("quit")))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "j k")).child("Move"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "↵")).child("Expand"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "l")).child("Open tab"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "y")).child("Copy prompt"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "/")).child("Search"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "q")).child("Quit")))
           .when(this.mode === "insert", (el) => el
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "↑↓")).child("move"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "↵")).child("done"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "⌫")).child("delete / to stop searching")))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "↑↓")).child("Move"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "↵")).child("Done"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "⌫")).child("Delete / to stop searching")))
           .child(div().flex_1())
-          .when(Boolean(this.flash), (el) => el.child(h_flex().flex_none().h(22).px(9).gap(6).items_center().rounded(11)
-            .bg(tint(this.flash.ok ? t.done : t.blocked, 0.16)).text_color(this.flash.ok ? t.done : t.blocked).font_family(SANS).text_size(11.5)
+          .when(Boolean(this.flash), (el) => el.child(h_flex().flex_none().h(22).px(10).gap(6).items_center().rounded(11)
+            .bg(tint(this.flash.ok ? t.done : t.blocked, 0.16)).text_color(this.flash.ok ? t.done : t.blocked).font_family(SANS).text_size(12)
             .child(div().font_bold().child(this.flash.ok ? "✓" : "!"))
             .child(this.flash.message)))
           .child(div().font_family(MONO).child(`${list.length} of ${all.length} · ${KEEP()} kept`))));
@@ -584,17 +595,17 @@ export default class Activity extends View {
 
   // "Clear activity history?" in place of the list, so nothing is lost by a stray click.
   confirmPanel(t, n) {
-    const button = (id, label, danger, onClick) => h_flex().id(id).h(28).px(14).items_center().rounded(8).cursor_pointer().font_family(SANS)
+    const button = (id, label, danger, onClick) => h_flex().id(id).h(28).px(14).items_center().rounded(6).cursor_pointer().font_family(SANS)
       .when(danger, (el) => el.bg(t.blocked).text_color(t.background).font_semibold())
       .when(!danger, (el) => el.bg(tint(t.foreground, 0.06)).text_color(t.muted).hover((h) => h.text_color(t.foreground)))
       .on_click((_e, cx) => { onClick(); cx.notify(); })
       .child(label);
     return v_flex().flex_1().min_h(0).items_center().justify_center()
-      .child(v_flex().w(400).p(18).gap(10).rounded(10).bg(t.background)
+      .child(v_flex().w(400).p(18).gap(10).rounded(6).bg(tint(t.foreground, 0.06))
         .child(h_flex().gap(8).items_center()
           .child(div().font_bold().text_color(t.blocked).child("!"))
           .child(div().font_family(SANS).font_semibold().text_size(13).child("Clear the activity history?")))
-        .child(div().font_family(SANS).text_size(12.5).text_color(t.muted)
+        .child(div().font_family(SANS).text_size(13).text_color(t.muted)
           .child(`This deletes all ${n} run${n === 1 ? "" : "s"}, with their prompts and replies, from the log and the sidebar. It can't be undone.`))
         .child(h_flex().pt(6).gap(8).justify_end().items_center()
           .child(div().font_family(MONO).text_size(11).text_color(t.dim).mr(4).child("esc · ↵"))

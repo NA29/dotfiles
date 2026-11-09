@@ -41,6 +41,23 @@ const CELLS = 10;
 // 3333 -> "3,333" (this runtime ignores toLocaleString formatting).
 const commas = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: Settings > Appearance > Style. Focused is text-only; Islands has pills and meters.
+const FOCUSED = () => R("look.style", "shell") !== "islands";
+
 export default class Status extends View {
   init(_props, cx) {
     this.stats = null;
@@ -71,23 +88,26 @@ export default class Status extends View {
   meter(t, icon, title, pct, color) {
     const lit = pct > 0 ? Math.max(1, Math.round((pct / 100) * CELLS)) : 0;
     return h_flex().id(`mod-${title}`).flex_none().gap(6).items_center().tooltip(`${title} ${Math.round(pct)}%`)
-      .child(svg(icon).size(13).flex_none().text_color(color))
-      // Sleek: a thin continuous bar.
-      .child(div().w(52).h(4).flex_none().rounded(2).bg(t.border)
-        .child(div().h_full().rounded(2).bg(color).w(pct > 0 ? `${Math.max(3, Math.min(100, pct))}%` : 0)))
-      .child(div().text_color(t.muted).child(`${Math.round(pct)}%`));
+      .when(FOCUSED(), (el) => el.child(div().font_family(SANS).text_color(t.dim).child(title === "cpu" ? "CPU" : "Mem"))
+        .child(div().text_color(color).child(`${Math.round(pct)}%`)))
+      .when(!FOCUSED(), (el) => el.child(svg(icon).size(14).flex_none().text_color(color))
+        .child(div().w(52).h(4).flex_none().rounded(2).bg(t.border)
+          .child(div().h_full().rounded(2).bg(color).w(pct > 0 ? `${Math.max(3, Math.min(100, pct))}%` : 0)))
+        .child(div().text_color(t.muted).child(`${Math.round(pct)}%`)));
   }
 
   // A drawn battery: an outline with a nub, filled to its level.
   battery(t, pct, charging, color) {
     const w = 22;
     return h_flex().id("mod-battery").flex_none().gap(6).items_center().tooltip(`battery ${pct}%${charging ? ", charging" : ""}`)
-      .child(h_flex().flex_none().items_center()
-        .child(div().w(w).h(11).p(1.5).rounded(3).border_1().border_color(color)
-          .child(div().h_full().rounded(1).bg(color).w(Math.max(2, Math.round(((w - 5) * pct) / 100)))))
-        .child(div().w(2).h(5).rounded_r(1).bg(color)))
-      .child(div().text_color(t.muted).child(`${pct}%`))
-      .when(charging, (el) => el.child(div().text_color(color).child("⚡")));
+      .when(FOCUSED(), (el) => el.child(div().font_family(SANS).text_color(t.dim).child(charging ? "Charging" : "Bat"))
+        .child(div().text_color(color).child(`${pct}%`)))
+      .when(!FOCUSED(), (el) => el.child(h_flex().flex_none().items_center()
+          .child(div().w(w).h(11).p(1.5).rounded(3).border_1().border_color(color)
+            .child(div().h_full().rounded(0.5).bg(color).w(Math.max(2, Math.round(((w - 5) * pct) / 100)))))
+          .child(div().w(2).h(5).rounded_r(1).bg(color)))
+        .child(div().text_color(t.muted).child(`${pct}%`))
+        .when(charging, (x) => x.child(div().text_color(color).child("⚡"))));
   }
 
   // What Spotify (or Apple Music) is playing, every 2 s. A player is asked only when it is
@@ -127,15 +147,15 @@ export default class Status extends View {
     const btn = (id, icon, cmd, tip) => div().id(id).p(3).rounded(4).flex_none().cursor_pointer().tooltip(tip)
       .text_color(t.dim).hover((h) => h.text_color(t.foreground).bg(t.hover))
       .on_click((_e, cx) => this.control(cmd, cx))
-      .child(svg(`mods/sleek-status/${icon}.svg`).size(11));
+      .child(svg(`mods/sleek-status/${icon}.svg`).size(12));
     return h_flex().id("nowplaying").flex_none().gap(8).items_center().when(!playing, (el) => el.opacity(0.6))
-      .child(h_flex().id("np-track").flex_none().gap(7).items_center().cursor_pointer()
+      .child(h_flex().id("np-track").flex_none().gap(8).items_center().cursor_pointer()
         .tooltip(playing ? "Pause" : "Play").on_click((_e, cx) => this.control("playpause", cx))
-        .child(svg("mods/sleek-status/music.svg").size(13).flex_none().text_color(playing ? t.done : t.dim))
+        .when(!FOCUSED(), (el) => el.child(svg("mods/sleek-status/music.svg").size(14).flex_none().text_color(playing ? t.muted : t.dim)))
         .child(div().max_w(220).truncate().font_family(SANS).text_color(t.foreground).child(n.title))
         .when(Boolean(n.artist), (el) => el.child(div().max_w(150).truncate().font_family(SANS).text_color(t.dim).child(`— ${n.artist}`))))
-      .when(n.dur > 0, (el) => el
-        .child(div().w(W).h(3).flex_none().rounded(2).bg(t.border).child(div().h_full().rounded(2).bg(t.done).w(filled)))
+      .when(!FOCUSED() && n.dur > 0, (el) => el
+        .child(div().w(W).h(3).flex_none().rounded(2).bg(t.border).child(div().h_full().rounded(2).bg(t.muted).w(filled)))
         .child(div().flex_none().text_color(t.dim).child(`${clock(n.pos)} / ${clock(n.dur)}`)))
       .when(R("bar.musicControls", true), (el) => el.child(h_flex().flex_none().gap(1).items_center()
         .child(btn("np-prev", "skip-back", "previous track", "Previous"))
@@ -167,7 +187,7 @@ export default class Status extends View {
     const dot = () => div().flex_none().text_color(t.border).child("·");
     return h_flex().id("wispr").flex_none().gap(8).items_center()
       .tooltip("Wispr Flow today")
-      .child(svg("mods/sleek-status/mic.svg").size(13).flex_none().text_color(t.ansi6))
+      .when(!FOCUSED(), (el) => el.child(svg("mods/sleek-status/mic.svg").size(14).flex_none().text_color(t.muted)))
       .child(item(commas(w.dictations), w.dictations === 1 ? "dictation" : "dictations"))
       .child(dot())
       .child(item(commas(w.words), "words"))
@@ -191,10 +211,10 @@ export default class Status extends View {
     const [cpuOn, memOn, batOn] = [R("bar.cpu", true), R("bar.memory", true), R("bar.battery", true)];
     const system = this.stats && (cpuOn || memOn || (batOn && this.stats.battery != null)) ? h_flex().flex_none().gap(12).items_center()
       // One color per module, red only when critical: cpu foam, memory rose, battery gold.
-      .when(cpuOn, (el) => el.child(this.meter(t, "mods/sleek-status/cpu.svg", "cpu", this.stats.cpu, this.stats.cpu >= 85 ? t.blocked : t.ansi4)))
-      .when(memOn, (el) => el.child(this.meter(t, "mods/sleek-status/memory.svg", "memory", this.stats.mem, this.stats.mem >= 90 ? t.blocked : t.ansi6)))
+      .when(cpuOn, (el) => el.child(this.meter(t, "mods/sleek-status/cpu.svg", "cpu", this.stats.cpu, this.stats.cpu >= 85 ? t.blocked : t.muted)))
+      .when(memOn, (el) => el.child(this.meter(t, "mods/sleek-status/memory.svg", "memory", this.stats.mem, this.stats.mem >= 90 ? t.blocked : t.muted)))
       .when(batOn && this.stats.battery != null, (el) => el.child(this.battery(t, this.stats.battery, this.stats.charging,
-        this.stats.battery <= 15 && !this.stats.charging ? t.blocked : t.ansi3))) : null;
+        this.stats.battery <= 15 && !this.stats.charging ? t.blocked : t.muted))) : null;
     const h = now.getHours(), mm = String(now.getMinutes()).padStart(2, "0");
     const time = R("bar.clock24", true) ? `${String(h).padStart(2, "0")}:${mm}` : `${h % 12 || 12}:${mm} ${h < 12 ? "am" : "pm"}`;
     const [agentsOn, dateOn, timeOn] = [R("bar.agents", true), R("bar.date", true), R("bar.time", true)];
@@ -209,9 +229,9 @@ export default class Status extends View {
       // Time: plain, bright.
       .when(timeOn, (el) => el.child(div().flex_none().text_color(t.foreground).font_semibold().child(time)));
     // Sleek experiment: each group is a soft pill in the panes' own background on the bar.
-    const pill = (el) => h_flex().flex_none().h(24).px(11).items_center().rounded(8).bg(glass(t.background)).child(el);
-    return h_flex().size_full().px(8).gap(12).items_center()
-      .font_family(MONO()).text_size(11.5).text_color(t.muted)
+    const pill = (el) => h_flex().flex_none().h(22).items_center().when(!FOCUSED(), (p) => p.px(12).rounded(concentric(ISLAND_R(), 6)).bg(glass(lift(t, 0.13)))).child(el);
+    return h_flex().size_full().px(FOCUSED() ? 14 : 6).gap(12).items_center()
+      .font_family(MONO()).text_size(FOCUSED() ? 11 : 12).text_color(t.muted)
       .child(h_flex().flex_1().min_w(0).items_center().justify_start().when(Boolean(system), (el) => el.child(pill(system))))
       .child(h_flex().flex_none().items_center().when(Boolean(this.np) && R("bar.music", true), (el) => el.child(pill(this.nowPlaying(t)))))
       .child(h_flex().flex_1().min_w(0).gap(8).items_center().justify_end()

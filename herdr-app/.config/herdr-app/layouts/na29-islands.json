@@ -9,8 +9,8 @@
     {
       "id": "dim",
       "type": "row",
-      "padding": 5,
-      "gap": 5,
+      "padding": 6,
+      "gap": 6,
       "children": [
         {
           "id": "sidebar",
@@ -23,7 +23,7 @@
                 "mod": "sleek-chrome"
               },
               "size": {
-                "px": 46
+                "px": 42
               },
               "window_drag": true
             },
@@ -41,8 +41,7 @@
                     "weight": 1
                   },
                   "min": 90,
-                  "background": "#eeeeef0f",
-                  "radius": 7
+                  "radius": 6
                 },
                 {
                   "id": "activity",
@@ -53,8 +52,7 @@
                   "size": {
                     "px": 60
                   },
-                  "background": "#eeeeef0f",
-                  "radius": 7
+                  "radius": 6
                 },
                 {
                   "id": "usage",
@@ -65,15 +63,14 @@
                   "size": {
                     "px": 164
                   },
-                  "background": "#eeeeef0f",
-                  "radius": 7
+                  "radius": 6
                 }
               ],
               "padding": [
                 0,
-                5
+                6
               ],
-              "gap": 5
+              "gap": 6
             },
             {
               "id": "sidebar-footer",
@@ -85,7 +82,7 @@
                 }
               },
               "size": {
-                "px": 40
+                "px": 26
               }
             }
           ],
@@ -94,13 +91,8 @@
           },
           "min": 44,
           "max": 480,
-          "background": "#010409bf",
           "resizable": false,
-          "radius": 12,
-          "border": {
-            "width": 1,
-            "color": "border"
-          }
+          "radius": 12
         },
         {
           "id": "work",
@@ -113,15 +105,10 @@
                 "mod": "sleek-tabs"
               },
               "size": {
-                "px": 40
+                "px": 36
               },
               "window_drag": true,
-              "background": "#010409bf",
-              "radius": 12,
-              "border": {
-                "width": 1,
-                "color": "border"
-              }
+              "radius": 12
             },
             {
               "id": "work-body",
@@ -133,13 +120,13 @@
                   "content": {
                     "tab": "active",
                     "pane": {
-                      "background": "#0d1117d9",
+                      "background": "background",
                       "focus": {
                         "width": 1,
-                        "color": "accent"
+                        "color": "border"
                       },
                       "radius": 12,
-                      "gap": 5,
+                      "gap": 6,
                       "lone": true,
                       "border": {
                         "width": 1,
@@ -187,19 +174,14 @@
                   "min": 280,
                   "max": 900,
                   "hidden": true,
-                  "background": "#010409bf",
-                  "radius": 12,
-                  "border": {
-                    "width": 1,
-                    "color": "border"
-                  }
+                  "radius": 12
                 }
               ],
               "padding": [
-                5,
+                6,
                 0
               ],
-              "gap": 5
+              "gap": 6
             },
             {
               "id": "status",
@@ -208,14 +190,9 @@
                 "mod": "sleek-status"
               },
               "size": {
-                "px": 32
+                "px": 26
               },
-              "background": "#010409bf",
-              "radius": 12,
-              "border": {
-                "width": 1,
-                "color": "border"
-              }
+              "radius": 12
             },
             {
               "id": "my-keys",
@@ -242,7 +219,7 @@
           "gap": 0
         }
       ],
-      "background": "#000000b0"
+      "background": "#101114ff"
     }
   ],
   "background": "#08070c",
@@ -253,17 +230,18 @@
   "titlebar": "none",
   "traffic_lights": [
     18,
-    20
+    18
   ],
   "padding": 0,
   "gap": 0,
-  "colors": {
-    "dim": "#8a86a3",
-    "muted": "#aaa6c3"
-  },
   "theme": {
     "light": "paper",
     "dark": "rose-pine"
+  },
+  "colors": {
+    "muted": "#b2b2b4",
+    "dim": "#9a9a9c",
+    "popover": "#101114"
   },
   "terminal_opacity": 0
 }

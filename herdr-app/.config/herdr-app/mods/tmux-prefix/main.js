@@ -82,6 +82,8 @@ function forwardKey(e, key) {
   return null;
 }
 
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class TmuxPrefix extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
@@ -167,14 +169,14 @@ export default class TmuxPrefix extends View {
       ["Spaces", [["J", "Next space", true], ["K", "Previous space", true]], []],
       ["App", [["g", "Go to…"], ["a", "Activity log"], ["u", "Usage"], ["s", "Settings"], ["t", "Toggle transparency"], ["b", "Toggle sidebar"], ["d", "Minimize window"]], []],
     ];
-    const cap = (text, accent = false) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(5)
-      .bg(accent ? tint(t.accent, 0.16) : tint(t.foreground, 0.07)).font_family(MONO).text_size(10.5)
+    const cap = (text, accent = false) => div().flex_none().min_w(22).h(20).px(6).flex().items_center().justify_center().rounded(4)
+      .bg(accent ? tint(t.accent, selA(t)) : tint(t.foreground, 0.12)).font_family(MONO).text_size(11)
       .text_color(accent ? t.accent : t.muted).child(text);
-    const item = ([key, label, repeatable]) => h_flex().w_full().h(30).px(8).gap(10).items_center().rounded(7)
+    const item = ([key, label, repeatable]) => h_flex().w_full().h(30).px(8).gap(10).items_center().rounded(6)
       .child(div().w(58).flex_none().flex().child(cap(key)))
-      .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12.5).text_color(t.foreground).child(label))
-      .when(Boolean(repeatable), (el) => el.child(div().flex_none().h(18).px(7).flex().items_center().rounded(9)
-        .bg(tint(t.working, 0.13)).font_family(SANS).text_size(10.5).text_color(t.working).child("repeat")));
+      .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).text_color(t.foreground).child(label))
+      .when(Boolean(repeatable), (el) => el.child(div().flex_none().h(18).px(8).flex().items_center().rounded(9)
+        .bg(tint(t.foreground, 0.10)).font_family(SANS).text_size(11).text_color(t.muted).child("Repeat")));
     const group = ([name, items, more]) => {
       const list = this.all ? [...items, ...more] : items;
       const pairs = [];
@@ -189,23 +191,23 @@ export default class TmuxPrefix extends View {
     // only as tall as its rows, so ? grows it instead of scrolling.
     return v_flex().id("tmux-prefix").size_full().track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(v_flex().w_full().pt(8).pb(4).rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
+      .child(v_flex().w_full().pt(5).pb(4).rounded(12).border_1().border_color(t.border).overflow_hidden()
         .bg(translucent(t.chrome, PANEL_ALPHA)).text_color(t.foreground)
         // Header: a filled bar like Go to's search field.
-        .child(h_flex().h(44).mx(8).px(12).gap(10).items_center().rounded(10).bg(t.background)
+        .child(h_flex().h(44).mx(5).px(11).gap(10).items_center().rounded(6).bg(tint(t.foreground, 0.06))
           // lualine-style block, like Go to's NORMAL/INSERT: PREFIX in the accent, REPEAT in gold.
-          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family(MONO).text_size(10.5).font_bold()
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(4).font_family(MONO).text_size(11).font_bold()
             .bg(this.repeat ? t.working : t.accent).text_color(t.background).child(this.repeat ? "REPEAT" : "PREFIX"))
           .child(cap(PREFIX_CAP()))
-          .child(div().flex_1().font_family(SANS).text_size(13.5).text_color(this.repeat ? t.working : t.muted)
-            .child(this.repeat ? `Repeat · ${REPEAT_MS()} ms` : "waiting for a key…"))
-          .child(h_flex().flex_none().gap(5).items_center().font_family(SANS).text_size(11).text_color(t.dim)
-            .child(cap("esc")).child(div().mr(6).child("cancel"))
+          .child(div().flex_1().font_family(SANS).text_size(14).text_color(this.repeat ? t.working : t.muted)
+            .child(this.repeat ? `Repeat · ${REPEAT_MS()} ms` : "Waiting for a key…"))
+          .child(h_flex().flex_none().gap(6).items_center().font_family(SANS).text_size(11).text_color(t.dim)
+            .child(cap("esc")).child(div().mr(6).child("Cancel"))
             .child(cap(PREFIX_CAP())).child(div().child(`send ${PREFIX_CAP()}`))))
         .child(v_flex().px(8).pt(2).children(GROUPS.map(group)))
         // Footer: what ? does.
         .child(h_flex().h(34).px(16).gap(6).items_center().font_family(SANS).text_size(11).text_color(t.dim)
           .child(cap("?"))
-          .child(div().child(this.all ? "fewer bindings" : "all bindings: tab numbers and arrow keys"))));
+          .child(div().child(this.all ? "Fewer bindings" : "All bindings: tab numbers and arrow keys"))));
   }
 }

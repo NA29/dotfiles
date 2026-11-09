@@ -126,7 +126,7 @@ function workspaceNumber(t, w) {
   const stored = (shared("space.colors") ?? {})[w.id];
   const color = w.name === "~" || !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
   return div().w(22).flex_none().flex().justify_center().font_family("Geist Mono").font_semibold().text_size(13)
-    .text_color(w.active ? color : tint(color, 0.55)).child(String(n || 0).padStart(2, "0"));
+    .text_color(numInk(t, color, !w.active)).child(String(n || 0).padStart(2, "0"));
 }
 
 function icon(p, size, color) {
@@ -149,8 +149,18 @@ function shortcut(action) {
 }
 
 function prompt(title, command, value) {
-  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 210, props: { title, value, command } });
+  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 192, frame: "none", props: { title, value, command } });
 }
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
+// Personal: workspace numbers. Softer when not current on dark themes; on light themes the pale
+// terminal colours are blended toward the text so they stay legible.
+const numInk = (t, c, dim = false) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) <= 128) return dim ? tint(c, 0.8) : c;
+  if (!/^#[0-9a-f]{6}/i.test(c)) return c;
+  return "#" + [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + parseInt(String(t.foreground).slice(i, i + 2), 16) * 0.45).toString(16).padStart(2, "0")).join("");
+};
 
 export default class GoTo extends View {
   init(_props, cx) {
@@ -269,7 +279,7 @@ export default class GoTo extends View {
 
   glyph(t, st) {
     if (st === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
-    if (st === "blocked") return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (st === "blocked") return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (st === "done") return div().size(7).mx(3).flex_none().rounded(4).bg(t.done);
     if (st === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim);
     return div().size(7).mx(3).flex_none();
@@ -288,23 +298,23 @@ export default class GoTo extends View {
 
   // A keycap: a soft filled pill in the mono font.
   cap(t, text) {
-    return div().flex_none().px(6).h(20).flex().items_center().rounded(5).bg(tint(t.foreground, 0.07))
-      .font_family("Geist Mono").text_size(10.5).text_color(t.muted).child(text);
+    return div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
+      .font_family("Geist Mono").text_size(11).text_color(t.muted).child(text);
   }
 
   pill(t, text, color) {
-    return div().flex_none().h(18).px(7).flex().items_center().rounded(9).bg(tint(color, 0.14)).text_size(10.5).text_color(color).child(text);
+    return div().flex_none().h(18).px(8).flex().items_center().rounded(9).bg(tint(color, 0.14)).text_size(11).text_color(color).child(text);
   }
 
   // Sleek rows (Raycast-style): roomy, a soft filled highlight for the selection.
   row(t, r, on) {
     if (r.kind === "section") {
-      return h_flex().h(SIZE.section).px(14).pt(10).items_center().text_size(11).font_semibold()
+      return h_flex().h(SIZE.section).px(15).pt(10).items_center().text_size(11).font_semibold()
         .text_color(r.label === "Needs you" ? t.blocked : t.dim).child(r.label);
     }
     // The cursor row: a soft accent wash (like the active tab pill and the current workspace card).
-    const base = (id, h) => h_flex().id(id).relative().h(h).mx(8).px(10).gap(10).items_center().rounded(8).cursor_pointer()
-      .when(on, (el) => el.bg(tint(t.accent, 0.14))).when(!on, (el) => el.hover((s) => s.bg(tint(t.foreground, 0.04))))
+    const base = (id, h) => h_flex().id(id).relative().h(h).mx(5).px(10).gap(10).items_center().rounded(6).cursor_pointer()
+      .when(on, (el) => el.bg(tint(t.accent, selA(t)))).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .on_click(() => this.go(r));
     // Tree guides (like eza --tree): a faint line down from the space's badge to each tab.
     const GUIDE = 21, guide = tint(t.foreground, 0.16);
@@ -314,12 +324,12 @@ export default class GoTo extends View {
         .when(Boolean(r.hasTabs), (el) => el.child(div().absolute().left(GUIDE).top(29).w(1).h(SIZE.space - 29).bg(guide)))
         .child((spaceColors(), workspaceNumber(t, s)))
         // Workspace names are headings: semibold everywhere; the shown one is bright.
-        .child(div().min_w(0).truncate().text_size(13.5).font_semibold().text_color(s.active ? t.foreground : t.muted).child(s.name))
+        .child(div().min_w(0).truncate().text_size(14).font_semibold().text_color(s.active ? t.foreground : t.muted).child(s.name))
         .when(Boolean(s.branch), (el) => el.child(div().min_w(0).truncate().font_family("Geist Mono").text_size(11).text_color(t.dim).child(`⎇ ${s.branch}`)))
         .when(Boolean(s.machine), (el) => el.child(div().text_size(11).text_color(t.dim).child(`@${s.machine}`)))
         .child(div().flex_1())
-        .child(div().flex_none().h(18).px(7).flex().items_center().rounded(9).bg(tint(t.foreground, 0.06))
-          .font_family("Geist Mono").text_size(10.5).text_color(t.dim).child(`${s.tabs.length} tab${s.tabs.length === 1 ? "" : "s"}`));
+        .child(div().flex_none().h(18).px(8).flex().items_center().rounded(9).bg(tint(t.foreground, 0.06))
+          .font_family("Geist Mono").text_size(11).text_color(t.dim).child(`${s.tabs.length} tab${s.tabs.length === 1 ? "" : "s"}`));
     }
     if (r.kind === "tab") {
       const { s, tab, mine } = r;
@@ -336,23 +346,22 @@ export default class GoTo extends View {
         .child(div().min_w(0).truncate().text_color(here ? t.foreground : t.muted).when(here, (d) => d.font_semibold()).child(r.label))
         .child(div().flex_1())
         // A tag naming it: the agent ("claude code"), "terminal", or the program; +N when a tab has more agents.
-        .child(div().flex_none().h(18).px(7).flex().items_center().rounded(9).font_family("Geist Mono").text_size(10.5)
-          // Rose, not the accent: purple stays reserved for "you are here".
-          .when(r.what === "agent", (el) => el.bg(tint(t.ansi6, 0.13)).text_color(t.ansi6))
-          .when(r.what !== "agent", (el) => el.bg(tint(t.foreground, 0.06)).text_color(t.dim))
-          .child(r.what === "agent" ? (r.program?.name ?? "agent").toLowerCase() : r.what === "terminal" ? "terminal" : (r.program?.name ?? "program").toLowerCase()))
-        .when(mine.length > 1, (el) => el.child(div().font_family("Geist Mono").text_size(10.5).text_color(t.dim).child(`+${mine.length - 1}`)))
+        .child(div().flex_none().h(18).px(8).flex().items_center().rounded(9).font_family("Geist Mono").text_size(11)
+          // A label, not a status: neutral for every kind.
+          .bg(tint(t.foreground, 0.10)).text_color(t.muted)
+          .child(r.what === "agent" ? (r.program?.name ?? "Agent") : r.what === "terminal" ? "Terminal" : (r.program?.name ?? "Program")))
+        .when(mine.length > 1, (el) => el.child(div().font_family("Geist Mono").text_size(11).text_color(t.dim).child(`+${mine.length - 1}`)))
         .when(tab.panes > 1, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${tab.panes} panes`)))
         .when(Boolean(hint), (el) => el.child(this.cap(t, hint)))
         // Status at the right edge, the sidebar's marks: spinner, red !, foam dot; idle says nothing.
         .child(div().w(12).flex_none().flex().items_center().justify_center()
-          .when(tab.status === "working", (el) => el.child(svg("mods/workspace-chrome/spinner.svg").size(11).text_color(t.working).spin(900)))
+          .when(tab.status === "working", (el) => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).text_color(t.working).spin(900)))
           .when(tab.status === "blocked", (el) => el.child(div().font_bold().text_color(t.blocked).child("!")))
           .when(tab.status === "done", (el) => el.child(div().size(6).rounded(3).bg(t.done))));
     }
     return base(`gt-act-${r.label}`, SIZE.action)
-      .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(6).bg(tint(t.foreground, 0.05))
-        .child(svg(`mods/workspace-chrome/${r.icon ?? "plus"}.svg`).size(13).text_color(on ? t.foreground : t.muted)))
+      .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(4).bg(tint(t.foreground, 0.05))
+        .child(svg(`mods/workspace-chrome/${r.icon ?? "plus"}.svg`).size(14).text_color(on ? t.foreground : t.muted)))
       .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(r.label))
       .when(Boolean(r.hint), (el) => el.child(this.cap(t, r.hint)));
   }
@@ -430,20 +439,20 @@ export default class GoTo extends View {
         else return;
         cx.stop_propagation();
       })
-      .child(v_flex().w_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
-        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(8)
+      .child(v_flex().w_full().rounded(12).border_1().border_color(t.border).overflow_hidden()
+        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(5)
         // Search: a filled field, like the sidebar's cards.
-        .child(h_flex().h(46).flex_none().mx(8).px(14).gap(10).items_center().rounded(10).bg(t.background)
+        .child(h_flex().h(46).flex_none().mx(5).px(14).gap(10).items_center().rounded(6).bg(tint(t.foreground, 0.06))
           // The mode, like vim's: neutral in normal, accent while typing.
           // lualine-style mode block: solid, uppercase; pine for NORMAL, the accent for INSERT.
-          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family("Geist Mono").text_size(10.5).font_bold()
-            .bg(this.mode === "insert" ? t.accent : t.ansi4).text_color(t.background)
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(4).font_family("Geist Mono").text_size(11).font_bold()
+            .bg(this.mode === "insert" ? t.accent : t.muted).text_color(t.background)
             .child(this.mode.toUpperCase()))
           .child(svg("mods/workspace-chrome/search.svg").size(16).flex_none().text_color(t.dim))
-          .child(Input.new(this.input).flex_1().h_full().text_size(15).text_color(t.foreground))
-          .child(h_flex().flex_none().gap(5).items_center().text_size(11).text_color(t.dim)
-            .when(this.mode === "normal", (el) => el.child(this.cap(t, "/")).child("search"))
-            .when(this.mode === "insert", (el) => el.child(this.cap(t, "esc")).child("close"))))
+          .child(Input.new(this.input).flex_1().h_full().text_size(14).text_color(t.foreground))
+          .child(h_flex().flex_none().gap(6).items_center().text_size(11).text_color(t.dim)
+            .when(this.mode === "normal", (el) => el.child(this.cap(t, "/")).child("Search"))
+            .when(this.mode === "insert", (el) => el.child(this.cap(t, "esc")).child("Close"))))
         // List
         .child(rows.length
           ? div().id("my-goto-list").relative().w_full().h(listH).my(4).overflow_hidden()
@@ -458,17 +467,17 @@ export default class GoTo extends View {
                 .h(Math.max(24, listH * listH / total)).top((listH - Math.max(24, listH * listH / total)) * (this.scroll / maxScroll))))
           : div().px(16).py(18).text_color(t.dim).child(`Nothing matches “${this.filter}”`))
         // Footer: keys on the left, counts on the right; no divider line.
-        .child(h_flex().h(38).flex_none().px(16).gap(14).items_center().text_size(11).text_color(t.dim)
+        .child(h_flex().h(38).flex_none().px(15).gap(14).items_center().text_size(11).text_color(t.dim)
           .when(this.mode === "normal", (el) => el
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "j k")).child("move"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "l")).child("open"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "h")).child("space"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "x")).child("close tab"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "q")).child("quit")))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "j k")).child("Move"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "l")).child("Open"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "h")).child("Space"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "x")).child("Close tab"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "q")).child("Quit")))
           .when(this.mode === "insert", (el) => el
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "↑↓")).child("move"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "↵")).child("open"))
-            .child(h_flex().gap(5).items_center().child(this.cap(t, "⌫")).child("delete / for normal mode")))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "↑↓")).child("Move"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "↵")).child("Open"))
+            .child(h_flex().gap(6).items_center().child(this.cap(t, "⌫")).child("Delete / for normal mode")))
           .child(div().flex_1())
           .child(div().font_family("Geist Mono").child(`${pickable.filter((r) => r.kind === "tab" && !r.withSpace).length} tabs · ${spaces().length} spaces`))));
   }

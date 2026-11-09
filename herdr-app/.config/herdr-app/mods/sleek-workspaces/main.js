@@ -35,7 +35,7 @@ const glass = (c) => {
 // Personal: every + here asks for the new space's name first (my-prompt), instead of
 // making one called after its folder.
 function newSpace(args = {}) {
-  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 210,
+  openOverlay({ mod: "my-prompt", kind: "dialog", width: 420, height: 192, frame: "none",
     props: { title: "New space", command: { name: "space.new", args } } });
 }
 
@@ -103,13 +103,21 @@ function numberBadge(t, w, i, size = 20) {
 
 // Personal: the workspace number as plain type (polybar/waybar style): zero-padded Geist Mono
 // in the workspace's colour, full strength for the shown one, softened for the others.
+// Personal: workspace numbers. Softer when not current on dark themes; on light themes the pale
+// terminal colours are blended toward the text so they stay legible.
+const numInk = (t, c, dim = false) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) <= 128) return dim ? tint(c, 0.8) : c;
+  if (!/^#[0-9a-f]{6}/i.test(c)) return c;
+  return "#" + [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + parseInt(String(t.foreground).slice(i, i + 2), 16) * 0.45).toString(16).padStart(2, "0")).join("");
+};
+
 function workspaceNumber(t, w, i) {
   const color = w.name === "~" ? t.ansi6 : (() => {
     const stored = (shared("space.colors") ?? {})[w.id];
     return !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
   })();
   return div().w(20).flex_none().font_family("Geist Mono").font_semibold().text_size(13)
-    .text_color(w.active ? color : tint(color, 0.55)).child(String(i + 1).padStart(2, "0"));
+    .text_color(numInk(t, color, !w.active)).child(String(i + 1).padStart(2, "0"));
 }
 
 // A space speaks up only when something in it needs you.
@@ -165,11 +173,30 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
+// Personal: concentric corners. Inner radius = outer radius - the padding between them.
+const concentric = (outer, inset) => Math.max(0, outer - inset);
+const ISLAND_R = () => (sqShared("rice") ?? {})["look.radius"] ?? 10;
+const SECTION_R = () => concentric(ISLAND_R(), (sqShared("rice") ?? {})["look.gap"] ?? 6);
+const CARD_R = () => SECTION_R();                  // cards sit straight on the island, one gap in
+const ROW_R = () => SECTION_R();                   // rows sit straight on the island, one gap in
+
+// Personal: surface levels. Blend the island colour toward the text colour, so a raised surface is
+// visibly lighter on any dark theme (darker on a light one). The Cards slider still applies via glass().
+const lift = (t, k) => {
+  if (parseInt(String(t.chrome).slice(1, 3), 16) > 128) k *= 0.4;   // light themes: soft neutral steps, not stacked greys
+  const a = String(t.chrome).slice(1, 7), b = String(t.foreground).slice(1, 7);
+  const out = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0"));
+  return `#${out.join("")}`;
+};
+
+// Personal: selection strength. A wash that reads on dark looks heavy on white.
+const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class Spaces extends View {
   init(_props, cx) {
-    if (props()?.viewMenu) {
+    if (props()?.viewMenu || props()?.spaceMenu) {
       this.menuHandle = cx.focus_handle();
       this.menuHandle.focus();
+      this.menuAt = Math.max(0, (props()?.items ?? []).findIndex((it) => it.active));
       return;
     }
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
@@ -445,17 +472,17 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(8).items_center().text_size(11).text_color(t.dim)
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
           localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
           cx.notify();
         })
-        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
+        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(14).flex_none())
         .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
           .when(!connected && !rebuilt, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
-          .when(rebuilt, el => el.child(h_flex().flex_none().gap(3).items_center()
+          .when(rebuilt, el => el.child(h_flex().flex_none().gap(4).items_center()
             .child(div().max_w(140).truncate().child(repair?.error || "rebuilt ·"))
             .child(div().id(`machine-connect-${m}`).text_color(repair?.error ? t.blocked : t.muted)
               .hover(s => s.text_color(t.foreground))
@@ -463,10 +490,10 @@ export default class Spaces extends View {
               .on_click((_e, cx) => { cx.stop_propagation(); this.reconnect(machine, cx); })
               .child(repair?.busy ? "Connecting…" : "Connect"))))
           .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
-            .on_click((_e, cx) => { cx.stop_propagation(); newSpace({ machine: m ?? "" }); }).child("+")))
-          .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
-          .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(7)
+            .on_click((_e, cx) => { cx.stop_propagation(); newSpace({ machine: m ?? "" }); }).child(svg("mods/workspace-chrome/plus.svg").size(12))))
+          .child(div().size(6).rounded(3).flex_none().bg(connected ? t.done : t.dim))
+          .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(12).flex_none()));
+      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(8).items_center().rounded(CARD_R())
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => newSpace({ machine: m ?? "" }))
         .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, el => el.child("New space there"));
@@ -487,10 +514,10 @@ export default class Spaces extends View {
     return h_flex()
       .flex_1()
       .min_w(0)
-      .gap(5)
+      .gap(6)
       .justify_end()
       .items_center()
-      .text_size(11.5)
+      .text_size(12)
       .text_color(t.dim)
       .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().child(where)))
       .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.ansi2).child(`\u2191${g.ahead}`)))
@@ -509,9 +536,32 @@ export default class Spaces extends View {
     if (dirty) localStorage.setItem("changed", JSON.stringify(this.changed));
   }
 
+  // The right end of a row's first line: the status when it matters, otherwise how long ago the
+  // agent last changed. Attention rows never repeat the status their group heading already states.
+  rowEnd(t, a, ctx, when, machine, tabIndex, workspace = null) {
+    const tabs = new Set(ctx.visibleAgents.filter((x) => x.space === a.space).map((x) => x.tab));
+    const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
+    const last = loud ? h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))
+      : when ? div().flex_none().child(duration(ctx.now - when)) : null;
+    return h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).text_color(t.muted)
+      .when(!workspace && tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().font_family(SANS).child(`Tab ${tabIndex}`)))
+      .when(!workspace && Boolean(machine), (el) => el.child(div().flex_none().child(`@${machine}`)))
+      .when(Boolean(last), (el) => el.child(last));
+  }
+
+  // The flat views' second line: which workspace this agent belongs to, by number and name.
+  whereLine(t, a, ctx, workspace, machine, tabIndex) {
+    const tabs = new Set(ctx.visibleAgents.filter((x) => x.space === a.space).map((x) => x.tab));
+    return h_flex().w_full().min_w(0).gap(6).items_center().font_family(SANS).text_size(11).text_color(t.muted)
+      .child(div().flex_none().font_family(ctx.mono).font_semibold().text_color(numInk(t, spaceTone(t, workspace), true)).child(String(workspace.num ?? "").padStart(2, "0")))
+      .child(div().flex_shrink_1().min_w(0).truncate().child(workspace.name))
+      .when(tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().child("·")).child(div().flex_none().child(`Tab ${tabIndex}`)))
+      .when(Boolean(machine), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).child(`@${machine}`)));
+  }
+
   agentStatus(t, st) {
     if (st === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
-    if (st === "blocked") return div().size(14).flex_none().rounded(3).bg(t.blocked + "26").text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (st === "blocked") return div().size(14).flex_none().rounded(3).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (st === "done") return div().size(7).mx(3).flex_none().rounded(4).bg(t.done);
     // Idle shows nothing (design rule): a ring on every quiet row is noise.
     return div().size(7).mx(3).flex_none();
@@ -527,31 +577,30 @@ export default class Spaces extends View {
     const quiet = a.status === "idle" && !a.focused;
     const pic = programIcon(a.program, 14, t.muted);
     const kids = ctx.all.filter((k) => k.parent === a.address && k.state === "live");
+    const title = name
+      ? div().w_full().truncate().text_size(13).text_color(quiet ? t.muted : t.foreground).child(name)
+      : div().w_full().truncate().text_size(13).italic().text_color(t.dim).child("untitled");
     return [
       // Sleek: the shown agent gets a filled highlight (like the open half of a toggle).
       // Personal (card polish): the shown agent is the "you are here" selection (accent wash);
       // the meta line is words in Geist, the age in Geist Mono; the program is the icon, so its
       // name isn't repeated in lowercase underneath.
-      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 40).flex_none().px(8).gap(10).items_center().rounded(7).cursor_pointer()
-        .when(a.focused, (h) => h.bg(tint(t.accent, 0.14)))
-        .when(!a.focused, (h) => h.hover((x) => x.bg(tint(t.foreground, 0.04))))
+      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 28).flex_none().px(14).gap(12).items_center().rounded(ROW_R()).cursor_pointer()
+        .when(Boolean(workspace), (el) => el.mb(2))
+        .when(a.focused, (h) => h.bg(tint(t.accent, selA(t))))
+        .when(!a.focused, (h) => h.hover((x) => x.bg(t.hover)))
         .on_click(() => run("pane.focus", a.pane ? { pane: a.pane } : { terminal: a.address }))
         .child(div().id(`ag-icon-${a.address}`).w(16).flex_none().flex().items_center().justify_center().tooltip(a.program?.name ?? prog)
           .when(Boolean(pic), (el) => el.child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(name
-            ? div().w_full().truncate().h(16).text_size(12.5).text_color(quiet ? t.muted : t.foreground).child(name)
-            : div().w_full().truncate().h(16).text_size(12.5).italic().text_color(t.dim).child("untitled"))
-          .child(h_flex().w_full().min_w(0).h(13).gap(5).items_center().font_family(SANS).text_size(11).text_color(t.dim)
-            .when(Boolean(workspace), el => el.child(div().flex_shrink_1().min_w(0).truncate()
-              .text_color(spaceTone(t, workspace)).tooltip(`${workspace.name}${workspace.machine ? ` @${workspace.machine}` : ""} · ${prog}`)
-              .child(workspace.name)).child(div().flex_none().child("·")))
-            .when(tabIndex != null, (el) => el.child(div().flex_none().child(`Tab ${tabIndex}`)))
-            .when(Boolean(when), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).text_size(10.5).child(duration(ctx.now - when))))
-            .when(Boolean(machine), (el) => el.child(div().flex_none().font_family(ctx.mono).text_color(t.muted).child(`@${machine}`)))))
-        .child(h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))),
+        .child(v_flex().flex_1().min_w(0).gap(2).justify_center().when(Boolean(workspace), (c) => c.line_height(1.2))
+          .child(h_flex().w_full().min_w(0).gap(12).items_center()
+            .child(div().flex_1().min_w(0).child(title))
+            .when(!workspace, (line) => line.child(this.rowEnd(t, a, ctx, when, machine, tabIndex, workspace))))
+          .when(Boolean(workspace), (c) => c.child(this.whereLine(t, a, ctx, workspace, machine, tabIndex))))
+        // Two-line rows: age or status centred on the row, mirroring the icon on the left.
+        .when(Boolean(workspace), (el) => el.child(this.rowEnd(t, a, ctx, when, machine, tabIndex, workspace))),
       // Sub-agents an agent started: one quiet line each, click to peek.
-      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(29).pr(10).gap(7).items_center()
+      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(29).pr(14).gap(8).items_center().rounded(ROW_R())
         .font_family(ctx.mono).text_size(11).text_color(t.muted).cursor_pointer()
         .hover((el) => el.bg(t.hover))
         .on_click(() => run("terminal.peek", { terminal: k.address }))
@@ -588,7 +637,7 @@ export default class Spaces extends View {
     const branch = rawBranch && rawBranch !== "main" && rawBranch !== "master" && rawBranch.toLowerCase() !== w.name.toLowerCase() ? rawBranch : null;
 
     // Hovering the title brightens it (no nested highlight inside the card).
-    const head = h_flex().id(`space-${w.id}`).h(32).px(8).gap(8).items_center().rounded(7).cursor_pointer()
+    const head = h_flex().id(`space-${w.id}`).h(26).pl(14).pr(12).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
       .text_color(on ? t.foreground : t.muted)
       .hover((h) => h.text_color(t.foreground))
       .on_mouse_down("left", () => {
@@ -618,11 +667,11 @@ export default class Spaces extends View {
       .when(Boolean(tree), (el) => el.child(div().text_color(t.dim).child("↳")))
       .child(workspaceNumber(t, w, i))
       // Workspace names are headings: semibold everywhere (agent titles stay regular); the shown one is bright.
-      .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13.5)
-        .font_semibold().text_color(on ? t.foreground : t.muted).child(w.name))
-      .when(Boolean(branch), (el) => el.child(div().flex_shrink_1().min_w(0).max_w(90).truncate().font_family(ctx.mono).text_size(10.5).text_color(t.dim).child(`⎇ ${branch}`)))
-      .when((g?.ahead ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(10.5).text_color(t.ansi2).child(`↑${g.ahead}`)))
-      .when((g?.behind ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(10.5).text_color(t.ansi1).child(`↓${g.behind}`)))
+      .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13)
+        .font_semibold().text_color(t.foreground).child(w.name))
+      .when(Boolean(branch), (el) => el.child(div().flex_shrink_1().min_w(0).max_w(90).truncate().font_family(ctx.mono).text_size(11).text_color(t.dim).child(`⎇ ${branch}`)))
+      .when((g?.ahead ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(11).text_color(t.ansi2).child(`↑${g.ahead}`)))
+      .when((g?.behind ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(11).text_color(t.ansi1).child(`↓${g.behind}`)))
       .child(div().flex_1())
       // Folded: every status with its count. Open: only what's urgent (the rows show the rest).
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))))
@@ -640,9 +689,9 @@ export default class Spaces extends View {
 
     const body = mine.length
       ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
-      : h_flex().id(`empty-${w.id}`).h(26).px(10).items_center().rounded(6).cursor_pointer()
-          .font_family(SANS).text_size(11.5).text_color(t.dim)
-          .hover((el) => el.bg(tint(t.foreground, 0.04)).text_color(t.muted))
+      : h_flex().id(`empty-${w.id}`).h(26).px(14).items_center().rounded(ROW_R()).cursor_pointer()
+          .font_family(SANS).text_size(12).text_color(t.dim)
+          .hover((el) => el.bg(t.hover).text_color(t.muted))
           .on_click(() => run("space.select", { id: w.id }))
           .child(`No agents · ${w.tabs.length} tab${w.tabs.length === 1 ? "" : "s"}`);
 
@@ -654,9 +703,7 @@ export default class Spaces extends View {
     // Personal (card polish): no glowing accent outline. Every card is the same quiet surface with
     // a neutral hairline; the shown one is a touch lighter and announced by its full-strength
     // number and bright name. Accent is kept for the focused agent row inside.
-    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : 12).px(6).pb(6).pt(2).rounded(10)
-      .bg(glass(mixHex(t.background, t.foreground, on ? 0.05 : 0.025)))
-      .border_1().border_color(tint(t.foreground, on ? 0.09 : 0.05))
+    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : tree ? 14 : 18)
       .when(Boolean(tree), (el) => el.ml(14))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
@@ -672,22 +719,20 @@ export default class Spaces extends View {
   // accent tile as its card; a corner dot tells what its agents are doing.
   compact({ w, i }, t) {
     const dot = w.status === "blocked" ? t.blocked : w.status === "done" ? t.done : w.status === "working" ? t.working : null;
-    return div().id(`space-${w.id}`).relative().w_full().h(40).flex_none().flex().items_center().justify_center()
+    return h_flex().id(`space-${w.id}`).relative().w_full().h(30).mb(2).flex_none().items_center().justify_center().rounded(ROW_R())
       .cursor_pointer().tooltip(w.name)
+      .when(w.active, (el) => el.bg(tint(t.accent, selA(t))))
+      .when(!w.active, (el) => el.hover((h) => h.bg(t.hover)))
       .on_click(() => run("space.select", { id: w.id }))
       .on_mouse_down("right", () => this.menu(w))
-      .child(div().relative().size(36).flex().items_center().justify_center().rounded(9)
-        .when(w.active, (el) => el.bg(glass(mixHex(t.background, t.accent, 0.07))))
-        .when(!w.active, (el) => el.hover((h) => h.bg(tint(t.foreground, 0.05))))
-        .child(numberBadge(t, w, i, 24))
-        .when(Boolean(dot), (el) => el.child(div().absolute().right(3).bottom(3).size(8).rounded(4).bg(dot)
-          .border_1().border_color(t.chrome))));
+      .child(div().font_family(MONO()).text_size(13).font_semibold().text_color(numInk(t, spaceTone(t, w), !w.active)).child(String(i + 1).padStart(2, "0")))
+      .when(Boolean(dot), (el) => el.child(div().absolute().right(5).top(5).size(6).rounded_full().bg(dot)));
   }
 
 
   viewMenuButton(t, mode) {
     const title = VIEW_MODES.find(([id]) => id === mode)?.[1] ?? "Spaces";
-    return div().id("agent-view-menu").size(20).flex_none().flex().items_center().justify_center().rounded(5)
+    return div().id("agent-view-menu").size(20).flex_none().flex().items_center().justify_center().rounded(4)
       .cursor_pointer().text_color(t.dim).hover(el => el.bg(t.hover).text_color(t.foreground))
       .tooltip(`View: ${title} · change agent view`)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -709,11 +754,11 @@ export default class Spaces extends View {
     };
     // Same language as Go to (my-goto): chrome panel, filled header with a mode block,
     // Raycast-style rows (icon tile, title, hint, keycap), keycap hints in the footer.
-    const hints = ["Workspace cards with nested agents", "Flat list with workspace labels", "Needs you, ready, running, idle"];
+    const hints = ["Agents under each workspace", "One flat list with workspace names", "Needs you, ready, running, idle"];
     const icons = ["mods/workspace-chrome/layers.svg", "mods/sleek-workspaces/agents.svg", "mods/sleek-workspaces/attention.svg"];
-    const cap = text => div().flex_none().px(6).h(20).flex().items_center().rounded(5).bg(tint(t.foreground, 0.07))
-      .font_family(MONO()).text_size(10.5).text_color(t.muted).child(text);
-    const hint = (keys, label) => h_flex().gap(5).items_center().child(cap(keys)).child(label);
+    const cap = text => div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
+      .font_family(MONO()).text_size(11).text_color(t.muted).child(text);
+    const hint = (keys, label) => h_flex().gap(6).items_center().child(cap(keys)).child(label);
     const current = VIEW_MODES.find(([id]) => id === mode)?.[1] ?? "Spaces";
     return v_flex().id("agent-view-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
       .on_key_down((e, cx) => {
@@ -722,22 +767,22 @@ export default class Spaces extends View {
         const key = e.key_char ?? e.key;
         if (plain && ["1", "2", "3"].includes(key)) { cx.stop_propagation(); choose(VIEW_MODES[Number(key) - 1][0]); }
       })
-      .child(v_flex().w_full().rounded(14).border_1().border_color(t.border).shadow_lg().overflow_hidden()
-        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(8)
+      .child(v_flex().w_full().rounded(12).border_1().border_color(t.border).overflow_hidden()
+        .bg(t.chrome).text_color(t.foreground).text_size(13).pt(5)
         // Header: a filled field with the lualine-style mode block, like Go to's search bar.
-        .child(h_flex().h(46).flex_none().mx(8).px(14).gap(10).items_center().rounded(10).bg(t.background)
-          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(6).font_family(MONO()).text_size(10.5).font_bold()
-            .bg(t.ansi4).text_color(t.background).child("VIEW"))
+        .child(h_flex().h(46).flex_none().mx(5).px(14).gap(10).items_center().rounded(6).bg(tint(t.foreground, 0.06))
+          .child(div().flex_none().h(22).px(8).flex().items_center().rounded(4).font_family(MONO()).text_size(11).font_bold()
+            .bg(t.muted).text_color(t.background).child("VIEW"))
           .child(div().flex_1().min_w(0).truncate().font_semibold().child("Agent view"))
-          .child(h_flex().flex_none().gap(5).items_center().text_size(11).text_color(t.dim).child(cap("esc")).child("close")))
+          .child(h_flex().flex_none().gap(6).items_center().text_size(11).text_color(t.dim).child(cap("esc")).child("Close")))
         // Rows
         .child(v_flex().my(4).gap(2).children(VIEW_MODES.map(([id, title], i) => {
           const on = mode === id;
-          return h_flex().id(`agent-view-${id}`).h(48).flex_none().mx(8).px(10).gap(10).items_center().rounded(8).cursor_pointer()
-            .when(on, el => el.bg(tint(t.accent, 0.14)))
-            .when(!on, el => el.hover(s => s.bg(tint(t.foreground, 0.04))))
+          return h_flex().id(`agent-view-${id}`).h(48).flex_none().mx(5).px(10).gap(10).items_center().rounded(6).cursor_pointer()
+            .when(on, el => el.bg(tint(t.accent, selA(t))))
+            .when(!on, el => el.hover(s => s.bg(t.hover)))
             .on_click((_e, cx) => { cx.stop_propagation(); choose(id); })
-            .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(6).bg(tint(t.foreground, 0.05))
+            .child(div().size(24).flex_none().flex().items_center().justify_center().rounded(4).bg(tint(t.foreground, 0.05))
               .child(svg(icons[i]).size(14).text_color(on ? t.accent : t.muted)))
             .child(v_flex().flex_1().min_w(0).gap(2)
               .child(div().truncate().font_semibold().text_color(t.foreground).child(title))
@@ -746,55 +791,87 @@ export default class Spaces extends View {
             .child(cap(String(i + 1)));
         })))
         // Footer: keys on the left, the current view on the right; no divider line.
-        .child(h_flex().h(38).flex_none().px(16).gap(14).items_center().text_size(11).text_color(t.dim)
-          .child(hint("1 2 3", "choose"))
+        .child(h_flex().h(38).flex_none().px(15).gap(14).items_center().text_size(11).text_color(t.dim)
+          .child(hint("1 2 3", "Choose"))
           .child(div().flex_1())
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Personal: in the Agents and Attention views, the workspaces sit in the header, under its title
-  // and above its hairline, so you can pick where new agents go (the + menu creates them in the
-  // shown workspace) without switching back to Spaces. Plain type, polybar-style: the shown one at
-  // full strength and bold, the others regular weight and dimmed; no fill, no accent.
+  // Agents and Attention: pick the workspace (the + makes new agents in the shown one). A dropdown,
+  // because it's one choice from a list of any length with names of any width: one uniform line
+  // showing the current workspace in full, and every workspace by name one click away.
   strip(t) {
-    return h_flex().id("ws-strip").flex_none().mx(8).pb(6).mb(8).flex_wrap().gap(2)
+    const list = this.ordered();
+    const cur = list.find((r) => r.w.active) ?? list[0];
+    if (!cur) return div();
+    const items = list.map(({ w, i }) => ({ id: w.id, name: w.name, num: i + 1, tone: spaceTone(t, w), status: w.status, active: w.active }));
+    return h_flex().id("ws-strip").flex_none().pb(6).mb(6).items_center()
       .border_b_1().border_color(tint(t.foreground, 0.08))
-      .children(this.ordered().map(({ w, i }) => {
-        const flag = w.status === "blocked"
-          ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
-          : w.status === "done" ? div().size(6).flex_none().rounded(3).bg(t.done) : null;
-        return h_flex().id(`ws-chip-${w.id}`).h(26).max_w(160).flex_none().px(6).gap(7).items_center().rounded(6)
-          .cursor_pointer().font_family(SANS).text_size(12.5)
-          .when(!w.active, el => el.hover(s => s.bg(tint(t.foreground, 0.04))))
-          .tooltip(w.active ? `${w.name} · new agents start here` : `Switch to ${w.name}`)
-          .on_click((_e, cx) => { cx.stop_propagation(); run("space.select", { id: w.id }); })
-          .on_mouse_down("right", () => this.menu(w))
-          // Contrast through type alone: the shown one bold and full strength, the others regular
-          // weight and pushed well back (number at 40% of its colour, name in the dim tone).
-          .child(div().flex_none().font_family(MONO()).text_size(13).font_bold()
-            .text_color(w.active ? spaceTone(t, w) : tint(spaceTone(t, w), 0.4)).child(String(i + 1).padStart(2, "0")))
-          .child(div().min_w(0).truncate().when(w.active, d => d.font_bold().text_color(t.foreground))
-            .when(!w.active, d => d.font_weight(400).text_color(t.dim)).child(w.name))
-          .when(Boolean(flag), el => el.child(flag));
-      }));
+      .child(h_flex().id("ws-switch").flex_1().min_w(0).h(28).pl(14).pr(14).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
+        .hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 260, height: Math.min(10 + items.length * 32, 344), frame: "none", props: { spaceMenu: true, items } });
+        })
+        .on_mouse_down("right", () => this.menu(cur.w))
+        .child(workspaceNumber(t, cur.w, cur.i))
+        .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(cur.w.name))
+        .child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.muted)));
+  }
+
+  // The workspace dropdown. Numbers pick directly; j/k and Enter move and choose; Esc closes.
+  renderSpaceMenu() {
+    const t = theme();
+    const items = props()?.items ?? [];
+    const close = () => closeOverlay(props().overlay);
+    const choose = (it) => { if (it) run("space.select", { id: it.id }); close(); };
+    return v_flex().id("space-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
+      .on_key_down((e, cx) => {
+        const key = e.key_char ?? e.key;
+        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
+        if (e.key === "escape") { cx.stop_propagation(); close(); return; }
+        if (!plain || !items.length) return;
+        if (/^[1-9]$/.test(key)) { const it = items.find((x) => x.num === Number(key)); if (it) { cx.stop_propagation(); choose(it); } return; }
+        if (key === "j" || e.key === "down") this.menuAt = (this.menuAt + 1) % items.length;
+        else if (key === "k" || e.key === "up") this.menuAt = (this.menuAt + items.length - 1) % items.length;
+        else if (e.key === "enter" || key === "l") { cx.stop_propagation(); choose(items[this.menuAt]); return; }
+        else return;
+        cx.stop_propagation(); cx.notify();
+      })
+      .child(v_flex().id("space-popup-list").w_full().max_h(344).rounded(12).border_1().border_color(t.border).overflow_y_scrollbar()
+        .bg(t.chrome).text_color(t.foreground).text_size(13).py(4).gap(2)
+        .children(items.map((it, i) => {
+          const flag = it.status === "blocked" ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
+            : it.status === "done" ? div().size(6).flex_none().rounded_full().bg(t.done) : null;
+          return h_flex().id(`space-pick-${it.id}`).h(30).flex_none().mx(5).px(9).gap(8).items_center().rounded(6).cursor_pointer()
+            .when(it.active, (el) => el.bg(tint(t.accent, selA(t))))
+            .when(!it.active && i === this.menuAt, (el) => el.bg(t.hover))
+            .when(!it.active, (el) => el.hover((s) => s.bg(t.hover)))
+            .on_click((_e, cx) => { cx.stop_propagation(); choose(it); })
+            .child(div().w(20).flex_none().font_family(MONO()).font_semibold().text_color(numInk(t, it.tone, !it.active)).child(String(it.num).padStart(2, "0")))
+            .child(div().flex_1().min_w(0).truncate().text_color(it.active ? t.foreground : t.muted).when(it.active, (d) => d.font_semibold()).child(it.name))
+            .when(Boolean(flag), (el) => el.child(flag))
+            .when(it.active, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.accent)));
+        })));
   }
 
   individuals(t, mode) {
     const ctx = this.ctx;
     const rows = ctx.visibleAgents;
+    const nums = new Map(this.ordered().map(({ w, i }) => [w.id, i + 1]));
     const draw = a => this.agentRow(t, a, ctx, t.accent, true,
-      ctx.spaceOf.get(a.space) ?? { id: a.space, name: a.space || "Workspace", machine: null });
+      { ...(ctx.spaceOf.get(a.space) ?? { id: a.space, name: a.space || "Workspace", machine: null }), num: nums.get(a.space), quiet: mode === "attention" });
     const children = [];
     if (mode === "attention") {
       for (const group of attentionGroups(rows)) {
-        children.push(h_flex().id(`attention-${group.status}`).h(28).mt(children.length ? 12 : 0).px(8).gap(7).items_center().flex_none()
-          .when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status)))
-          .child(div().flex_1().font_family(SANS).text_size(11).font_semibold().text_color(t.muted).child(group.title))
-          .child(div().font_family(MONO()).text_size(10.5).text_color(t.dim).child(String(group.agents.length))));
+        children.push(h_flex().id(`attention-${group.status}`).h(26).mt(children.length ? 16 : 0).px(14).gap(12).items_center().flex_none()
+          .child(h_flex().w(16).flex_none().justify_center().when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status))))
+          .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(group.title))
+          .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.muted).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
       }
     } else children.push(...rows.flatMap(draw));
-    if (!rows.length) children.push(v_flex().px(10).py(14).gap(6)
+    if (!rows.length) children.push(v_flex().px(14).py(14).gap(6)
       .child(div().font_family(SANS).text_size(12).text_color(t.muted).child("No agents running"))
       .child(div().font_family(SANS).text_size(11).text_color(t.dim).child("Your workspaces and shell tabs are still available.")));
     return children;
@@ -803,6 +880,7 @@ export default class Spaces extends View {
 
   render() {
     if (props()?.viewMenu) return this.renderViewMenu();
+    if (props()?.spaceMenu) return this.renderSpaceMenu();
     const t = theme();
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
@@ -847,7 +925,7 @@ export default class Spaces extends View {
       // Click the header to fold the whole list away (remembered).
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
         // Personal: a hairline under the section header so it reads apart from the cards.
-        .when(!collapsed && !this.listFolded, el => el.mx(8).pl(6).pr(0))
+        .when(!collapsed && !this.listFolded, el => el.mx(0).pl(14).pr(8))
         .when(!collapsed && !this.listFolded && mode === "workspaces", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
@@ -855,24 +933,24 @@ export default class Spaces extends View {
             localStorage.setItem("list.folded", this.listFolded ? "1" : "0");
             cx.notify();
           })
-          .child(div().font_family(SANS).text_size(12).text_color(t.muted).font_semibold().child(mode === "workspaces" ? "Workspaces" : "Agents"))
+          .child(div().font_family(SANS).text_size(12).text_color(t.muted).font_semibold().child(mode === "workspaces" ? "Workspaces" : mode === "attention" ? "Attention" : "Agents"))
           .child(div().h(16).px(6).flex().items_center().rounded(8).bg(tint(t.foreground, 0.06)).text_color(t.dim).child(`${mode === "workspaces" ? sp.length : list.length}`))
           .child(this.viewMenuButton(t, mode))
           .child(div().flex_1())
           .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`${needs} need you`)))
           .when(busy > 0, el => el.child(div().text_color(t.working).child(`${busy} busy`))))
         // Rail: a button to widen the sidebar again, above the +.
-        .when(collapsed, el => el.flex_col().h(64).py(4).gap(2).justify_center()
+        .when(collapsed, el => el.flex_col().h(64).py(4).pl(0).pr(0).gap(2).justify_center()
           .child(div().id("rail-expand").size(26).flex_none().flex().items_center().justify_center().rounded(6)
             .text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip("Expand sidebar")
             .on_click(() => {
               setShared("sidebar.collapsed", false);
               run("layout.resize", { id: "sidebar", px: shared("sidebar.width") ?? 268 });
             })
-            .child(svg("mods/workspace-chrome/sidebar.svg").size(15))))
+            .child(svg("mods/workspace-chrome/sidebar.svg").size(16))))
         .child(plus))
       .when(!collapsed && !this.listFolded && mode !== "workspaces", el => el.child(this.strip(t)))
-      .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+      .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).px(collapsed ? 8 : 0).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));
   }

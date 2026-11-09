@@ -17,7 +17,7 @@ then commit.
   (bottom bar: CPU/memory/battery, now playing, Wispr Flow, clock), `sleek-pane` (pane header),
   `sleek-chrome` (brand row + footer buttons), `sleek-files` / `sleek-changes` (the Files and
   Changes panel island, cloned from Herdr's `files`/`changes`), `my-keys` (key actions + settings writer), `my-ping` (zero-height
-  block: pops `thumbs-up.png` left of Herdr's toast when a Claude Code agent is done/needs you; Herdr's
+  block: pops `thumbs-up.png` left of Herdr's toast when any agent is done/needs you; Herdr's
   `toast` mod is shipped, so this sits beside it rather than restyling it), `my-context` (the
   Context panel beside Files/Changes: the focused Claude session's CLAUDE.md files and skills, listed vs
   loaded, read from its transcript by `extract.py`; terminal → session via the Activity hook's log).
@@ -57,10 +57,36 @@ then commit.
 - Shared menu language (Go to is the reference): chrome panel, borderless `t.background` fills,
   no outlines, lualine-style mode block (solid, uppercase mono: NORMAL / INSERT / PREFIX /
   ACTIVITY), keycap pills, footer key hints.
-- Workspace numbers are plain type: zero-padded `01` in the workspace colour (others at 55%), no
+- Workspace numbers are plain type: zero-padded `01` in the workspace colour (others at 80%), no
   tile. Workspace names are headings: semibold everywhere; agent titles regular. No italics
   (italic means "untitled").
+- Window spacing is one system: gap 6, island radius 12, section radius 6; every bar's controls sit 6px in
+  (radius 6). Tabs 40 + gap 6 = brand row 46; status 34 + gap 6 = sidebar footer 40, so pane and sidebar
+  sections share top and bottom edges. Changing one of these numbers breaks that alignment.
+- Colour system: raised surfaces use `lift(t, k)` (island colour blended toward text) through `glass()`, or
+  `tint(t.foreground, a)` inside opaque menus. Never fill a card or pill with `t.background`: it nearly matches
+  what's under it (only recessed inputs may). Neutral pills and keycaps: foreground 10-12%, `t.muted` text.
+  Colour means state: gold working, red needs you, green done; finished/closed pills are neutral. Selection is
+  accent 20% on every selected row, tab and segment. Meters and bar icons are `t.muted` until a threshold turns
+  them gold or red. Resting mode blocks are `t.muted`, active ones accent. Every menu sits on `t.chrome`.
+  Claude is `#d97757`, never gold. Text on raised surfaces is `t.muted`, not `t.dim`.
+- Light and dark: `t.dim`/`t.muted` are written by `applyLook` (`readableInks`, solved per theme). Don't hard-code them.
+  `background.on` false = no wallpaper, root background is the theme's `canvas`.
+- Light themes are designed, not inverted: `lift` steps are 40% as strong, selection is accent 12% (`selA`), sections are
+  white with a hairline, the backdrop is a soft tint of the island colour, and the dark solid/gradient presets and dim veil are ignored.
+- Sidebar: no section backgrounds, no workspace cards. Groups are plain 26px headers (names always full brightness) with rows beneath, 18px between groups. Rows everywhere sit one gap in with radius 6, text 14px in; sections are split by hairlines. In the Workspaces view agent rows are one line (28px): status or age at the right, a tab label only when that workspace's agents span tabs.
+- Agents and Attention views: two-line 42px rows: title with status or age on the first line, the workspace's coloured number and name on the second. Above them is one dropdown line: the current workspace in full, every workspace by name on click. Attention headings match workspace headings and rows don't repeat their group's status.
+- Style (Settings > Appearance, rice `look.style`): `shell` = Focused (sidebar and bars have no surface, only the terminal is a card, accent border only when the tab is split, text-only 26px status bar, 26px sidebar footer, 36px top bar and 42px brand row with the window buttons at y 18); `islands` = every section a panel (34px status bar with pills and meters, 40px footer, 40px top bar, 46px brand row, window buttons at y 20). The sleek mods branch on `FOCUSED()`.
+- Folded sidebar (rail): one centred column only: expand, new space, workspace numbers (selected row wash, small status dot), Settings. Activity and Usage collapse to nothing until it expands.
+- Type scale, only these sizes: 11 (meta, chips), 12, 13 (body), 14 (headings), 16, 18. Icons 12/14/16.
+- Spacing is on a 2px grid (`gap`/`px`: even numbers). Exceptions: `px(7)` on workspace rows (keeps text on
+  the 14px edge) and `p(3)`/`py(3)`/`gap(1)` where a fitted height or concentric inset depends on them.
+- Hover on a row or button is always `t.hover`. UI labels are sentence case; program names as the app spells
+  them. Icons are SVGs (`mods/workspace-chrome/`), not text glyphs like + or ›.
 - Spacing: space between groups must exceed space inside them; 6px rhythm.
+- Corners are concentric: inner radius = outer radius − the inset between them (count a parent's border).
+  Sleek mods derive this from `look.radius`/`look.gap` with `concentric(...)`; the one scale everywhere is 12 windows and islands, 6 cards/rows/controls
+  (one 6px inset: 1 border + 5 in pop-ups), 4 small chips and keycaps, plus true pills and circles. Panel rows are 4 (8px in).
 - Tabs: only the active tab is a pill (accent wash); others bare, pill on hover.
 - Vim keys in Go to and the Activity log: j/k, l/Enter, h, gg/G, ⌃D/⌃U; a leading `/` in the
   search field is the search mode (Backspace over it returns); Esc always closes.
