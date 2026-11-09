@@ -544,9 +544,9 @@ export default class Spaces extends View {
     const last = loud ? h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
     return h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).text_color(t.muted)
-      .when(!workspace && tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().font_family(SANS).child(`Tab ${tabIndex}`)))
+      .when(!workspace && tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().child(`Tab ${tabIndex}`)))
       .when(!workspace && Boolean(machine), (el) => el.child(div().flex_none().child(`@${machine}`)))
-      .when(Boolean(last), (el) => el.child(last));
+      .when(Boolean(last), (el) => el.child(!workspace && tabs.size > 1 ? h_flex().w(26).flex_none().justify_end().child(last) : last));
   }
 
   // The flat views' second line: which workspace this agent belongs to, by number and name.
@@ -555,7 +555,7 @@ export default class Spaces extends View {
     return h_flex().w_full().min_w(0).gap(6).items_center().font_family(SANS).text_size(11).text_color(t.muted)
       .child(div().flex_none().font_family(ctx.mono).font_semibold().text_color(numInk(t, spaceTone(t, workspace), true)).child(String(workspace.num ?? "").padStart(2, "0")))
       .child(div().flex_shrink_1().min_w(0).truncate().child(workspace.name))
-      .when(tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().child("·")).child(div().flex_none().child(`Tab ${tabIndex}`)))
+      .when(tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).child(`Tab ${tabIndex}`)))
       .when(Boolean(machine), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).child(`@${machine}`)));
   }
 
