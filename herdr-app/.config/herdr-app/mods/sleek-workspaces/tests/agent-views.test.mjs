@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from '../agent-views.js';
-import { shellCount, withShellState } from '../shell-state.js';
+import { shellReading, shellCount, withShellState } from '../shell-state.js';
 const fixture=[
  {address:'a',space:'one',tab:'t1',pane:'p1',status:'working',title:'Build interface',program:{name:'Codex',icon:'icons/codex.svg'}},
  {address:'b',space:'two',tab:'t2',pane:'p2',status:'blocked',title:'Fix parser',program:{name:'Claude',icon:'icons/claude.svg'}},
@@ -31,7 +31,7 @@ class Element{
 }
 const el=()=>new Element(), sp=[{id:'one',name:'Frontend',active:true,tabs:[{id:'t1',index:1}]},{id:'two',name:'Backend',tabs:[{id:'t2',index:1}]}];
 const state={rice:{'sidebar.agentView':mode,'usage.codex':false},'space.colors':{one:'ansi6',two:'ansi3'}};
-const scope={shellCount,withShellState,homeDir:()=>"/home/test",VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el,sqDiv:el,image:el,svg:el,v_flex:el,h_flex:el,
+const scope={shellReading,shellCount,withShellState,homeDir:()=>"/home/test",VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el,sqDiv:el,image:el,svg:el,v_flex:el,h_flex:el,
  console,Date,Math,Number,String,Boolean,Map,Set,Object,Array,JSON,
  shared:k=>state[k],sqShared:k=>state[k],setShared:(k,v)=>{state[k]=v;calls.push(['shared',k,v]);},
  spaces:()=>sp,machines:()=>[],panes:()=>fixture.map(a=>({pane:a.pane,tab:a.tab,cwd:'/repo'})),agents:()=>fixture,terminals:()=>[],
@@ -78,3 +78,55 @@ assert.equal(withShellState(fixture[3], {seq: 'old', at: Date.now(), count: 2}).
 assert.equal(withShellState(fixture[3], {seq: fixture[3].seq, at: Date.now() - 16000, count: 2}).status, 'done');
 assert.equal(withShellState(fixture[3], {seq: fixture[3].seq, at: Date.now(), count: 0}).status, 'done');
 console.log('PASS: shell footer detection, completion clearing, stale reads, state priority and waiting group rendering.');
+
+const codexScreen = `Worked for 6s • 14:52
+1 background terminal running · /ps to view · /stop to close
+› Ask Codex to do anything
+GPT-6.1-Sol low · ~ · Ready · Context 13% used · 5h 95% left
+← for agents · ? for shortcuts`;
+const codexReading = {...shellReading(codexScreen), seq: 7, at: Date.now()};
+assert.equal(codexReading.count, 1);
+const codexAgent = {...fixture[0], app: 'codex', seq: 7};
+assert.equal(withShellState(codexAgent, codexReading).status, 'waiting');
+assert.equal(withShellState(codexAgent, {...shellReading(codexScreen.replace('Ready', 'Working')), seq: 7, at: Date.now()}).status, 'working');
+assert.equal(withShellState({...codexAgent, status:'blocked'}, codexReading).status, 'blocked');
+assert.equal(withShellState({...codexAgent, seq:8}, codexReading).status, 'working');
+for (const app of ['opencode', 'claude-code', 'codex', 'another-agent']) {
+ const agent = {...fixture[0], app, status: 'idle'};
+ const jobs = [{terminal: agent.address}];
+ assert.equal(withShellState(agent, undefined, jobs, Date.now()).status, 'waiting', app);
+ assert.equal(withShellState({...agent, status:'working'}, undefined, jobs, Date.now()).status, 'working', app);
+ assert.equal(withShellState({...agent, status:'blocked'}, undefined, jobs, Date.now()).status, 'blocked', app);
+ assert.equal(withShellState(agent, undefined, [], Date.now()).status, 'idle', app);
+ assert.equal(withShellState(agent, undefined, jobs, Date.now()-16000).status, 'idle', app);
+ assert.equal(withShellState(agent, undefined, [{terminal:'another-terminal',cwd:'/repo'}], Date.now()).status, 'idle', app);
+}
+scope.agents = () => [codexAgent];
+view.shellReadings = {[codexAgent.address]:codexReading};
+state.rice['sidebar.agentView'] = 'attention';
+render();
+assert(elements.find(e => e.identifier === 'attention-waiting'));
+assert(!elements.find(e => e.identifier === 'attention-working'));
+scope.agents = () => [{...fixture[0], app:'opencode',status:'idle'}];
+view.shellReadings = {};
+view.jobs = [{terminal:fixture[0].address}]; view.jobsAt = Date.now();
+render(); assert(elements.find(e => e.identifier === 'attention-waiting'));
+console.log('PASS: Codex Ready vs Working, screenshot regression, OpenCode/Claude/other agent job ownership, completion, stale scans and permission priority.');
+const readAgents = [
+ {...fixture[0],address:'codex', app:'codex',seq:7},
+ {...fixture[0],address:'claude',app:'claude-code',status:'idle'},
+ {...fixture[0],address:'opencode',app:'opencode',status:'idle'},
+ {...fixture[0],address:'other',app:'other-agent',status:'idle'},
+];
+scope.agents = () => readAgents;
+const readAddresses = [];
+scope.hc = async args => {readAddresses.push(args[1]); return {code:0, stdout:args[1]==='codex'?codexScreen:''};};
+view.refreshShells({spawn: f => {scope.readTask = f({notify(){}});}});
+await scope.readTask;
+assert.deepEqual(readAddresses,['codex','claude','opencode','other']);
+assert.equal(view.shellReadings.codex.ready,true);
+scope.hc = async () => {throw new Error('terminal gone');};
+view.refreshShells({spawn: f => {scope.readTask = f({notify(){}});}});
+await scope.readTask;
+assert.equal(Object.keys(view.shellReadings).length,0);
+console.log('PASS: live-reader integration includes all agents and clears failed reads.');

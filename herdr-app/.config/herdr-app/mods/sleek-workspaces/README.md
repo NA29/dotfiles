@@ -16,11 +16,21 @@ In **Agents** and **Attention**, a strip of workspace pills sits under the heade
 
 ## Waiting for shells
 
-A Claude agent reporting idle/done with an explicit `N shells still running` completion
-footer is shown as `waiting`: a muted native pulse and shell count, with its own
-Attention group. Active work and approval requests keep priority. The live screen is
-read every five seconds; readings expire after fifteen seconds and are discarded on
-status sequence changes or read failures. Only the latest completion footer counts.
-This is a sidebar display state, not a new herdr-core status. Other agents, detached
-jobs, and sessions without a status report retain their existing behavior. Herdr's
-built-in toasts and other mods still use the core status.
+The shared state rule applies to every agent, including Claude Code, Codex and
+OpenCode: an idle/done agent with live background shells belonging to its exact
+terminal is shown as `waiting`. Jobs are discovered by the existing shell scanner;
+folder-only matches are not used for status because several agents can share a repo.
+
+Native terminal signals supplement process discovery: Claude's latest completion
+footer supplies its shell count. Codex's background-terminal banner supplies its
+count, and its current `Ready` status allows waiting even when core still reports
+`working`. A Codex `Working` footer keeps the running indicator. Approval requests
+always keep priority. Unknown agents use the shared ownership rule without a TUI
+parser. Detached jobs with no attributable terminal stay listed but do not change
+an unrelated agent's status.
+
+Waiting rows show a muted native pulse and shell count, with their own Attention
+group. Reads/scans run every five seconds; stale data expires after fifteen seconds,
+read failures clear the associated data, and screen readings are invalidated by a
+status sequence change. This is a sidebar display state, not a new core status;
+built-in toasts, tabs and other mods still use the core status.

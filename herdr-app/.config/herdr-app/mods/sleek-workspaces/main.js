@@ -10,7 +10,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir, knownAgents } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
-import { shellCount, withShellState } from "./shell-state.js";
+import { shellReading, withShellState } from "./shell-state.js";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
 
 // Personal: the Square corners setting (rice "look.square") squares every corner drawn with
@@ -570,13 +570,12 @@ export default class Spaces extends View {
     this.readingShells = true;
     cx.spawn(async (cx) => {
       try {
-        const candidates = agents().filter(a => ['idle', 'done'].includes(a.status)
-          && /claude/i.test(a.app ?? a.program?.key ?? ''));
+        const candidates = agents().filter(a => a.status !== 'blocked');
         const next = {};
         await Promise.all(candidates.map(async a => {
           try {
             const screen = await hc(['read', a.address]);
-            next[a.address] = { seq: a.seq, count: screen.code === 0 ? shellCount(screen.stdout) : 0, at: Date.now() };
+            if (screen.code === 0) next[a.address] = { seq: a.seq, ...shellReading(screen.stdout), at: Date.now() };
           } catch {} // Missing terminals and failed reads clear their previous reading.
         }));
         this.shellReadings = next;
@@ -591,8 +590,10 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try {
         const r = await exec("python3", ["-I", `${homeDir()}/.config/herdr-app/mods/sleek-workspaces/shells.py`]);
-        if (r.code === 0) this.jobs = JSON.parse(r.stdout);
-      } catch {} finally { this.readingJobs = false; cx.notify(); }
+        if (r.code !== 0) throw new Error("Shell scan failed");
+        this.jobs = JSON.parse(r.stdout);
+        this.jobsAt = Date.now();
+      } catch { this.jobs = []; this.jobsAt = 0; } finally { this.readingJobs = false; cx.notify(); }
     });
   }
 
@@ -674,7 +675,7 @@ export default class Spaces extends View {
   rowEnd(t, a, ctx, when, workspace = null) {
     if (a.status === "waiting") return h_flex().flex_none().gap(4).items_center()
       .font_family(SANS).text_size(11).text_color(t.muted)
-      .tooltip(`Waiting for ${a.shells} background ${a.shells === 1 ? "shell" : "shells"}; resumes automatically`)
+      .tooltip(`Waiting for ${a.shells} background ${a.shells === 1 ? "shell" : "shells"}; background work is still running`)
       .child(this.agentStatus(t, "waiting")).child(`${a.shells} ${a.shells === 1 ? "shell" : "shells"}`);
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
@@ -1066,7 +1067,7 @@ export default class Spaces extends View {
     const silent = panes()
       .filter((p) => p.terminal && p.status == null && this.agentKeys.has(p.program?.key) && !known.has(p.terminal) && spaceOfTab.has(p.tab))
       .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, space: spaceOfTab.get(p.tab).id, status: "idle", app: p.app, program: p.program, title: p.title, focused: p.focused, pinned: false }));
-    const list = [...reporting, ...silent].map(a => withShellState(a, this.shellReadings?.[a.address]));
+    const list = [...reporting, ...silent].map(a => withShellState(a, this.shellReadings?.[a.address], this.jobs, this.jobsAt));
     for (const w of sp) {
       const mine = list.filter(a => a.space === w.id);
       if (mine.length) w.status = mine.reduce((best, a) => (RANK[a.status] ?? 0) > (RANK[best] ?? 0) ? a.status : best, "idle");
