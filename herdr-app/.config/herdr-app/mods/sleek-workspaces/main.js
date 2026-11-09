@@ -650,9 +650,9 @@ export default class Spaces extends View {
   }
 
   // The waiting dot is the way into an agent's shells. Sized as a real target, then pulled back by
-  // margins so the dot itself stays on the same edge as every other row's status.
-  shellButton(t, a, ctx) {
-    return div().id(`shells-${a.address}`).size(20).my(-2).mr(-3.5).flex_none().flex().items_center().justify_center().rounded(4)
+  // margins: on the status marks' axis, or flush with the ages and counts where it's the only mark.
+  shellButton(t, a, ctx, flush) {
+    return div().id(`shells-${a.address}`).size(20).my(-2).mr(flush ? -6.5 : -3.5).flex_none().flex().items_center().justify_center().rounded(4)
       .cursor_pointer().hover((el) => el.bg(t.hover))
       .tooltip("Waiting for background shells")
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -785,7 +785,7 @@ export default class Spaces extends View {
   // agent last changed. Flush right, so ages and marks share one edge. Attention rows don't repeat
   // their group's status.
   rowEnd(t, a, ctx, when, workspace = null) {
-    if (a.status === "waiting") return this.shellButton(t, a, ctx);
+    if (a.status === "waiting") return this.shellButton(t, a, ctx, Boolean(workspace?.quiet));
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
@@ -1073,11 +1073,11 @@ export default class Spaces extends View {
     const children = [];
     if (mode === "attention") {
       for (const group of attentionGroups(rows)) {
-        // A heading sits tight on its rows, with about twice that distance between groups, so each
-        // group reads as one block. It's styled as a label, like the panel title, so agents lead.
-        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 24 : 0).px(14).gap(12).items_center().flex_none()
-          .child(h_flex().w(16).flex_none().justify_center().when(!["idle", "waiting"].includes(group.status), el => el.child(this.agentStatus(t, group.status))))
+        // A heading starts on the panel title's edge, outdented from its rows, so the eye can run
+        // down the labels. It's styled as a label too, so agents lead. Its mark sits with the count.
+        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 20 : 0).px(14).gap(8).items_center().flex_none()
           .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
+          .when(["blocked", "done", "working"].includes(group.status), el => el.child(this.agentStatus(t, group.status)))
           .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
       }
