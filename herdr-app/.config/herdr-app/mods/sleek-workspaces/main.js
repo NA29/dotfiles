@@ -10,6 +10,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir, knownAgents } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
+import { shellCount, withShellState } from "./shell-state.js";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
 
 // Personal: the Square corners setting (rice "look.square") squares every corner drawn with
@@ -155,7 +156,7 @@ export function glyph(status) {
 // Font rule: words in Geist, numbers and code in Geist Mono (one family, designed together).
 const MONO = () => "Geist Mono";
 const SANS = "Geist";
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+const RANK = { blocked: 4, done: 3, working: 2, waiting: 1.5, idle: 1 };
 function duration(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "now";
@@ -229,6 +230,10 @@ export default class Spaces extends View {
       this.menuAt = Math.max(0, (props()?.items ?? []).findIndex((it) => it.active));
       return;
     }
+    this.shellReadings = {};
+    this.readingShells = false;
+    this.refreshShells(cx);
+    cx.timer.every(5000, cx => this.refreshShells(cx));
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -554,6 +559,25 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  refreshShells(cx) {
+    if (this.readingShells) return;
+    this.readingShells = true;
+    cx.spawn(async (cx) => {
+      try {
+        const candidates = agents().filter(a => ['idle', 'done'].includes(a.status)
+          && /claude/i.test(a.app ?? a.program?.key ?? ''));
+        const next = {};
+        await Promise.all(candidates.map(async a => {
+          try {
+            const screen = await hc(['read', a.address]);
+            next[a.address] = { seq: a.seq, count: screen.code === 0 ? shellCount(screen.stdout) : 0, at: Date.now() };
+          } catch {} // Missing terminals and failed reads clear their previous reading.
+        }));
+        this.shellReadings = next;
+      } finally { this.readingShells = false; cx.notify(); }
+    });
+  }
+
   // Stamps agents whose state changed (done and idle count as one).
   track(list, now) {
     let dirty = false;
@@ -570,6 +594,10 @@ export default class Spaces extends View {
   // agent last changed. Flush right, so ages and marks share one edge. Attention rows don't repeat
   // their group's status.
   rowEnd(t, a, ctx, when, workspace = null) {
+    if (a.status === "waiting") return h_flex().flex_none().gap(4).items_center()
+      .font_family(SANS).text_size(11).text_color(t.muted)
+      .tooltip(`Waiting for ${a.shells} background ${a.shells === 1 ? "shell" : "shells"}; resumes automatically`)
+      .child(this.agentStatus(t, "waiting")).child(`${a.shells} ${a.shells === 1 ? "shell" : "shells"}`);
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
@@ -599,6 +627,7 @@ export default class Spaces extends View {
   }
 
   agentStatus(t, st) {
+    if (st === "waiting") return div().size(7).mx(3).flex_none().rounded_full().bg(t.muted).loop("opacity", { from: 0.35, to: 0.8, period: 1800 });
     if (st === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
     if (st === "blocked") return div().size(14).flex_none().rounded(3).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (st === "done") return div().size(7).mx(3).flex_none().rounded(4).bg(t.done);
@@ -650,11 +679,11 @@ export default class Spaces extends View {
   // rows use (a spinner, a red !, a filled dot; idle has no mark) so the edge and the rows agree.
   counts(t, mine) {
     const n = (st) => mine.filter((a) => a.status === st).length;
-    const mark = (st) => st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(10).flex_none().text_color(t.working).spin(900)
+    const mark = (st) => st === "waiting" ? this.agentStatus(t, st) : st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(10).flex_none().text_color(t.working).spin(900)
       : st === "blocked" ? div().flex_none().font_bold().text_color(t.blocked).child("!")
       : st === "done" ? div().size(6).flex_none().rounded(3).bg(t.done)
       : null;
-    return ["blocked", "working", "done", "idle"]
+    return ["blocked", "working", "waiting", "done", "idle"]
       .filter((st) => n(st) > 0)
       .map((st) => h_flex().flex_none().gap(4).items_center().when(st !== "idle", (el) => el.child(mark(st)))
         .child(div().text_color(st === "idle" ? t.dim : t.muted).child(String(n(st)))));
@@ -768,7 +797,7 @@ export default class Spaces extends View {
   // Narrow sidebar (rail): the workspace's badge, centred; the shown one sits on the same faint
   // accent tile as its card; a corner dot tells what its agents are doing.
   compact({ w, i }, t) {
-    const dot = w.status === "blocked" ? t.blocked : w.status === "done" ? t.done : w.status === "working" ? t.working : null;
+    const dot = w.status === "blocked" ? t.blocked : w.status === "done" ? t.done : w.status === "working" ? t.working : w.status === "waiting" ? t.muted : null;
     return h_flex().id(`space-${w.id}`).relative().w_full().h(30).mb(2).flex_none().items_center().justify_center().rounded(ROW_R())
       .cursor_pointer().tooltip(w.name)
       .when(w.active, (el) => el.bg(tint(t.accent, selA(t))))
@@ -804,7 +833,7 @@ export default class Spaces extends View {
     };
     // Same language as Go to (my-goto): chrome panel, filled header with a mode block,
     // Raycast-style rows (icon tile, title, hint, keycap), keycap hints in the footer.
-    const hints = ["Agents under each workspace", "One flat list with workspace names", "Needs you, ready, running, idle"];
+    const hints = ["Agents under each workspace", "One flat list with workspace names", "Needs you, ready, running, waiting for shells, idle"];
     const icons = ["mods/workspace-chrome/layers.svg", "mods/sleek-workspaces/agents.svg", "mods/sleek-workspaces/attention.svg"];
     const cap = text => div().flex_none().px(6).h(20).flex().items_center().rounded(4).bg(tint(t.foreground, 0.12))
       .font_family(MONO()).text_size(11).text_color(t.muted).child(text);
@@ -957,7 +986,11 @@ export default class Spaces extends View {
     const silent = panes()
       .filter((p) => p.terminal && p.status == null && this.agentKeys.has(p.program?.key) && !known.has(p.terminal) && spaceOfTab.has(p.tab))
       .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, space: spaceOfTab.get(p.tab).id, status: "idle", app: p.app, program: p.program, title: p.title, focused: p.focused, pinned: false }));
-    const list = [...reporting, ...silent];
+    const list = [...reporting, ...silent].map(a => withShellState(a, this.shellReadings?.[a.address]));
+    for (const w of sp) {
+      const mine = list.filter(a => a.space === w.id);
+      if (mine.length) w.status = mine.reduce((best, a) => (RANK[a.status] ?? 0) > (RANK[best] ?? 0) ? a.status : best, "idle");
+    }
     this.track(list, now);
     const order = new Map(sp.map((s, n) => [s.id, n]));
     const since = (a) => this.changed[a.address]?.at ?? 0;

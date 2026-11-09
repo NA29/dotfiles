@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from '../agent-views.js';
+import { shellCount, withShellState } from '../shell-state.js';
 const fixture=[
  {address:'a',space:'one',tab:'t1',pane:'p1',status:'working',title:'Build interface',program:{name:'Codex',icon:'icons/codex.svg'}},
  {address:'b',space:'two',tab:'t2',pane:'p2',status:'blocked',title:'Fix parser',program:{name:'Claude',icon:'icons/claude.svg'}},
@@ -30,7 +31,7 @@ class Element{
 }
 const el=()=>new Element(), sp=[{id:'one',name:'Frontend',active:true,tabs:[{id:'t1',index:1}]},{id:'two',name:'Backend',tabs:[{id:'t2',index:1}]}];
 const state={rice:{'sidebar.agentView':mode,'usage.codex':false},'space.colors':{one:'ansi6',two:'ansi3'}};
-const scope={VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el,sqDiv:el,image:el,svg:el,v_flex:el,h_flex:el,
+const scope={shellCount,withShellState,homeDir:()=>"/home/test",VIEW_MODES,viewMode,orderAgents,attentionGroups,View:class{},div:el,sqDiv:el,image:el,svg:el,v_flex:el,h_flex:el,
  console,Date,Math,Number,String,Boolean,Map,Set,Object,Array,JSON,
  shared:k=>state[k],sqShared:k=>state[k],setShared:(k,v)=>{state[k]=v;calls.push(['shared',k,v]);},
  spaces:()=>sp,machines:()=>[],panes:()=>fixture.map(a=>({pane:a.pane,tab:a.tab,cwd:'/repo'})),agents:()=>fixture,terminals:()=>[],
@@ -57,3 +58,23 @@ assert(!elements.some(e=>e.identifier==='agent-browse-workspaces'),'no browse-wo
 state.rice['sidebar.agentView']='workspaces';render();assert(elements.find(e=>e.identifier==='space-one'));
 scope.agents=()=>[];state.rice['sidebar.agentView']='agents';render();assert(!elements.find(e=>e.identifier==='agent-browse-workspaces'));
 console.log('PASS: stable flat order, pinned agents, attention groups, unknown/empty states, preserved settings, workspace view, navigation order, agent actions and removed footer.');
+
+const waitingAgent = withShellState(fixture[3], {seq: fixture[3].seq, at: Date.now(), count: 2});
+assert.equal(waitingAgent.status, 'waiting');
+assert.equal(attentionGroups([waitingAgent])[0].title, 'Waiting for shells');
+scope.agents = () => [fixture[3]];
+view.shellReadings = {d: {seq: fixture[3].seq, at: Date.now(), count: 2}};
+state.rice['sidebar.agentView'] = 'attention';
+render();
+assert(elements.find(e => e.identifier === 'attention-waiting'));
+assert.equal(shellCount('✻ Worked for 42s · done 2:14 PM · 2 shells still running'), 2);
+assert.equal(shellCount('✻ Worked for 42s · done 2:14 PM · 1 shell still running'), 1);
+assert.equal(shellCount('Agent says 2 shells still running'), 0);
+assert.equal(shellCount('✻ Worked for 42s · done 2:14 PM · 2 shells still running\n✻ Baked for 1s · done 2:15 PM'), 0);
+for (const status of ['working', 'blocked']) {
+ assert.equal(withShellState({...fixture[3], status}, {seq: fixture[3].seq, at: Date.now(), count: 2}).status, status);
+}
+assert.equal(withShellState(fixture[3], {seq: 'old', at: Date.now(), count: 2}).status, 'done');
+assert.equal(withShellState(fixture[3], {seq: fixture[3].seq, at: Date.now() - 16000, count: 2}).status, 'done');
+assert.equal(withShellState(fixture[3], {seq: fixture[3].seq, at: Date.now(), count: 0}).status, 'done');
+console.log('PASS: shell footer detection, completion clearing, stale reads, state priority and waiting group rendering.');
