@@ -52,6 +52,9 @@ mkdir -p "$HOME/.config/herdr-app"
 rsync -a --backup --backup-dir="$BACKUP_DIR/.config/herdr-app" \
   "$DOTFILES/herdr-app/.config/herdr-app/" "$HOME/.config/herdr-app/"
 echo "Copied: herdr-app"
+# Herdr opens its stock layout until it remembers another, so a fresh Mac starts on the personal one.
+# Only when there's no saved state: shared.json also holds this Mac's Activity history.
+[[ -f "$HOME/.config/herdr-app/shared.json" ]] || echo '{"layout":"na29-islands"}' > "$HOME/.config/herdr-app/shared.json"
 [[ -d "$BACKUP_DIR" ]] && echo "Replaced files saved in $BACKUP_DIR"
 
 # 6. Codex: put the conversation name in the terminal title, so Herdr's sidebar can show it.
@@ -110,7 +113,7 @@ Manual steps:
     pick iterm/Default.json and set it as default (Rose Pine colors,
     JetBrains Mono Nerd Font, Left Option = Esc+).
   - Herdr: run `herdr` once; Claude integration hooks are already linked.
-  - Herdr desktop app: open it once, then pick the personal layout with
+  - Herdr desktop app: it should open on the personal layout. If it doesn't, press
     Cmd-Shift-L until "na29-islands" shows (or: herdr-app do layout.switch --name na29-islands).
     The first time Spotify plays, allow "Herdr wants to control Spotify" so
     the bottom bar can show what's playing.
