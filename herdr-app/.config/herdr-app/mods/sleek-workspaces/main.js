@@ -782,11 +782,10 @@ export default class Spaces extends View {
   }
 
   // The right end of a row's first line: the status when it matters, otherwise how long ago the
-  // agent last changed. Flush right, so ages and marks share one edge. Attention rows don't repeat
-  // their group's status.
+  // agent last changed. Flush right, so ages and marks share one edge.
   rowEnd(t, a, ctx, when, workspace = null) {
     if (a.status === "waiting") return this.shellButton(t, a, ctx, Boolean(workspace?.quiet));
-    const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
+    const loud = a.status === "working" || a.status === "blocked" || a.status === "done";
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
     return h_flex().flex_none().items_center().font_family(ctx.mono).text_size(11).text_color(!workspace && !a.focused ? t.dim : t.muted)
@@ -1074,10 +1073,9 @@ export default class Spaces extends View {
     if (mode === "attention") {
       for (const group of attentionGroups(rows)) {
         // A heading starts on the panel title's edge, outdented from its rows, so the eye can run
-        // down the labels. It's styled as a label too, so agents lead. Its mark sits with the count.
-        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 16 : 6).px(14).gap(8).items_center().flex_none()
+        // down the labels. It's styled as a label too, so agents lead. Status marks live on the rows.
+        children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 16 : 6).mb(4).px(14).gap(8).items_center().flex_none()
           .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
-          .when(["blocked", "done", "working"].includes(group.status), el => el.child(this.agentStatus(t, group.status)))
           .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
       }
