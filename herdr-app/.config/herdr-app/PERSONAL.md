@@ -58,8 +58,8 @@ then commit.
   no outlines, lualine-style mode block (solid, uppercase mono: NORMAL / INSERT / PREFIX /
   ACTIVITY), keycap pills, footer key hints.
 - Workspace numbers are plain type: zero-padded `01` in the workspace colour (others at 80%), no
-  tile. Workspace names are headings: semibold everywhere; agent titles regular. No italics
-  (italic means "untitled").
+  tile. Workspace names are headings: semibold everywhere; agent titles regular. No italics;
+  a session with no useful title (or only its terminal address) goes by its agent's name.
 - Window spacing is one system: gap 6, island radius 12, section radius 6; every bar's controls sit 6px in
   (radius 6). Tabs 40 + gap 6 = brand row 46; status 34 + gap 6 = sidebar footer 40, so pane and sidebar
   sections share top and bottom edges. Changing one of these numbers breaks that alignment.
@@ -74,12 +74,12 @@ then commit.
   `background.on` false = no wallpaper, root background is the theme's `canvas`.
 - Light themes are designed, not inverted: `lift` steps are 40% as strong, selection is accent 12% (`selA`), sections are
   white with a hairline, the backdrop is a soft tint of the island colour, and the dark solid/gradient presets and dim veil are ignored.
-- Sidebar: no section backgrounds, no workspace cards. Groups are plain 26px headers (names always full brightness) with rows beneath, 18px between groups. Rows everywhere sit one gap in with radius 6, text 14px in; sections are split by hairlines. In the Workspaces view agent rows are one line (28px): status or age at the right, a tab label only when that workspace's agents span tabs.
+- Sidebar: no section backgrounds, no workspace cards. Groups are plain 26px headers (names always full brightness) with rows beneath, 18px between groups. Rows everywhere sit one gap in with radius 6, text 14px in; sections are split by hairlines. In the Workspaces view agent rows are two lines (42px): title and status or age on line 1, flush right; the latest prompt from the Activity log across all of line 2, or the agent's folder when there's no prompt or it repeats the title. An open workspace's header carries no counts (its rows are right below); folded ones show each status with its count, idle as a plain number.
 - Agents and Attention views: two-line 42px rows: title with status or age on the first line, the workspace's coloured number and name on the second. Above them is one dropdown line: the current workspace in full, every workspace by name on click. Attention headings match workspace headings and rows don't repeat their group's status.
 - Style (Settings > Appearance, rice `look.style`): `shell` = Focused (sidebar and bars have no surface, only the terminal is a card, accent border only when the tab is split, text-only 26px status bar, 26px sidebar footer, 36px top bar and 42px brand row with the window buttons at y 18); `islands` = every section a panel (34px status bar with pills and meters, 40px footer, 40px top bar, 46px brand row, window buttons at y 20). The sleek mods branch on `FOCUSED()`.
 - Folded sidebar (rail): one centred column only: expand, new space, workspace numbers (selected row wash, small status dot), Settings. Activity and Usage collapse to nothing until it expands.
 - Type scale, only these sizes: 11 (meta, chips), 12, 13 (body), 14 (headings), 16, 18. Icons 12/14/16.
-- Spacing is on a 2px grid (`gap`/`px`: even numbers). Exceptions: `px(7)` on workspace rows (keeps text on
+- Spacing is on a 2px grid (`gap`/`px`: even numbers). Exceptions: `pl(33)` on tree rows (lines agent titles up with workspace names by eye), `px(7)` on workspace rows (keeps text on
   the 14px edge) and `p(3)`/`py(3)`/`gap(1)` where a fitted height or concentric inset depends on them.
 - Hover on a row or button is always `t.hover`. UI labels are sentence case; program names as the app spells
   them. Icons are SVGs (`mods/workspace-chrome/`), not text glyphs like + or ›.
@@ -90,6 +90,7 @@ then commit.
 - Tabs: only the active tab is a pill (accent wash); others bare, pill on hover.
 - Vim keys in Go to and the Activity log: j/k, l/Enter, h, gg/G, ⌃D/⌃U; a leading `/` in the
   search field is the search mode (Backspace over it returns); Esc always closes.
+- `programs.json` points Codex at `mods/sleek-workspaces/codex.svg`: Herdr's icon without its white tile, so program icons are all bare marks.
 - Rejected ideas (don't re-propose): blur (needs Pillow), context-window bars (no data for
   Codex/OpenCode), translucent menus, hover-only pane headers, accent underlines, letter tiles.
 
