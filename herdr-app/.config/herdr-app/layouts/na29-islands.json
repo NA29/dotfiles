@@ -219,7 +219,7 @@
           "gap": 0
         }
       ],
-      "background": "#101114ff"
+      "background": "#0c1016ff"
     }
   ],
   "background": "#08070c",
@@ -239,9 +239,9 @@
     "dark": "rose-pine"
   },
   "colors": {
-    "muted": "#b2b2b4",
-    "dim": "#9a9a9c",
-    "popover": "#101114"
+    "muted": "#b1b2b4",
+    "dim": "#989a9d",
+    "popover": "#0c1016"
   },
   "terminal_opacity": 0
 }

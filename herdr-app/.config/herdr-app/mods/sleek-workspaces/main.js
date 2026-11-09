@@ -7,7 +7,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
@@ -103,6 +103,18 @@ function numberBadge(t, w, i, size = 20) {
 
 // Personal: the workspace number as plain type (polybar/waybar style): zero-padded Geist Mono
 // in the workspace's colour, full strength for the shown one, softened for the others.
+// Personal: each agent's latest prompt, from the Activity log (newest run first), tidied for one line.
+const cleanPrompt = (p) => String(p ?? "").replace(/<\/?pasted_content[^>]*>/g, " ").replace(/\[Image #\d+\]/g, " ").replace(/\s+/g, " ").trim().replace(/^[-–:]\s*/, "");
+const latestPrompts = () => {
+  const out = new Map();
+  for (const r of shared("activity.runs") ?? []) {
+    if (out.has(r.address) || /^\s*<hc>/.test(String(r.prompt ?? ""))) continue;
+    const text = cleanPrompt(r.prompt);
+    if (text) out.set(r.address, text);
+  }
+  return out;
+};
+
 // Personal: workspace numbers. Softer when not current on dark themes; on light themes the pale
 // terminal colours are blended toward the text so they stay legible.
 const numInk = (t, c, dim = false) => {
@@ -133,7 +145,7 @@ const SANS = "Geist";
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 function duration(ms) {
   const m = Math.floor(ms / 60000);
-  if (m < 1) return "<1m";
+  if (m < 1) return "now";
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
@@ -162,7 +174,7 @@ function sessionName(a, cwdOf, tabOf) {
   const low = raw.toLowerCase();
   const folder = (cwdOf.get(a.pane) ?? "").split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
   const said = [a.program?.name, a.program?.key, a.app].filter(Boolean).map((x) => x.toLowerCase());
-  const generic = !raw || said.includes(low) || low === folder || /^[~/]/.test(raw) || raw.includes("@")
+  const generic = !raw || said.includes(low) || low === folder || low === a.address.split("/").pop() || /^[~/]/.test(raw) || raw.includes("@")
     || /^(claude( code)?|codex|open ?code|shell)$/.test(low) || /^new session\b/.test(low);
   if (!generic) return raw;
   const tab = tabOf.get(a.tab);
@@ -537,25 +549,34 @@ export default class Spaces extends View {
   }
 
   // The right end of a row's first line: the status when it matters, otherwise how long ago the
-  // agent last changed. Attention rows never repeat the status their group heading already states.
-  rowEnd(t, a, ctx, when, machine, tabIndex, workspace = null) {
-    const tabs = new Set(ctx.visibleAgents.filter((x) => x.space === a.space).map((x) => x.tab));
+  // agent last changed. Flush right, so ages and marks share one edge. Attention rows don't repeat
+  // their group's status.
+  rowEnd(t, a, ctx, when, workspace = null) {
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
-    const last = loud ? h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))
+    const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
-    return h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).text_color(!workspace && !a.focused ? t.dim : t.muted)
-      .when(!workspace && tabs.size > 1 && tabIndex != null, (el) => el.child(h_flex().flex_none().gap(4).items_center().child(div().font_family(SANS).child("Tab")).child(div().child(String(tabIndex)))))
-      .when(!workspace && Boolean(machine), (el) => el.child(div().flex_none().child(`@${machine}`)))
-      .when(Boolean(last), (el) => el.child(!workspace && tabs.size > 1 ? h_flex().w(26).flex_none().justify_end().child(last) : last));
+    return h_flex().flex_none().items_center().font_family(ctx.mono).text_size(11).text_color(!workspace && !a.focused ? t.dim : t.muted)
+      .when(Boolean(last), (el) => el.child(last));
+  }
+
+  // The Workspaces view's second line: what you last asked this agent, across the full width.
+  // With no prompt, or one that only repeats the title, the agent's folder says something instead.
+  promptLine(t, a, ctx, machine, title) {
+    const prompt = ctx.prompts.get(a.address);
+    const useful = Boolean(prompt) && prompt.toLowerCase() !== title.toLowerCase();
+    const cwd = ctx.cwdOf.get(a.pane) ?? "";
+    const atHome = cwd === homeDir();
+    const folder = atHome ? "Home" : (cwd.split("/").filter(Boolean).pop() ?? "");
+    return h_flex().w_full().min_w(0).gap(6).items_center().font_family(SANS).text_size(11).text_color(a.focused ? t.muted : t.dim)
+      .child(div().flex_shrink_1().min_w(0).truncate().when(!useful && Boolean(folder) && !atHome, (d) => d.font_family(ctx.mono)).child(useful ? prompt : folder || "No prompt yet"))
+      .when(Boolean(machine), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).child(`@${machine}`)));
   }
 
   // The flat views' second line: which workspace this agent belongs to, by number and name.
-  whereLine(t, a, ctx, workspace, machine, tabIndex) {
-    const tabs = new Set(ctx.visibleAgents.filter((x) => x.space === a.space).map((x) => x.tab));
+  whereLine(t, a, ctx, workspace, machine) {
     return h_flex().w_full().min_w(0).gap(6).items_center().font_family(SANS).text_size(11).text_color(t.muted)
       .child(div().flex_none().font_family(ctx.mono).font_semibold().text_color(numInk(t, spaceTone(t, workspace), true)).child(String(workspace.num ?? "").padStart(2, "0")))
       .child(div().flex_shrink_1().min_w(0).truncate().child(workspace.name))
-      .when(tabs.size > 1 && tabIndex != null, (el) => el.child(div().flex_none().child("·")).child(h_flex().flex_none().gap(4).items_center().child(div().child("Tab")).child(div().font_family(ctx.mono).child(String(tabIndex)))))
       .when(Boolean(machine), (el) => el.child(div().flex_none().child("·")).child(div().flex_none().font_family(ctx.mono).child(`@${machine}`)));
   }
 
@@ -569,38 +590,35 @@ export default class Spaces extends View {
 
   // marked: show which agent is selected (only worth it with two or more in the box).
   agentRow(t, a, ctx, color = t.accent, marked = true, workspace = null) {
-    const name = sessionName(a, ctx.cwdOf, ctx.tabOf);
-    const tabIndex = ctx.tabOf.get(a.tab)?.index;
+    // A session with no useful title of its own goes by its agent's name.
+    const name = sessionName(a, ctx.cwdOf, ctx.tabOf) ?? a.program?.name ?? a.app ?? "Agent";
     const when = this.changed[a.address]?.at;
     const prog = (a.program?.name ?? a.app ?? "agent").toLowerCase();
     const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
     const quiet = a.status === "idle" && !a.focused;
     const pic = programIcon(a.program, 14, t.muted);
     const kids = ctx.all.filter((k) => k.parent === a.address && k.state === "live");
-    const title = name
-      ? div().w_full().truncate().text_size(13).text_color(quiet ? t.muted : t.foreground).child(name)
-      : div().w_full().truncate().text_size(13).italic().text_color(t.dim).child("untitled");
+    const title = div().w_full().truncate().text_size(13).text_color(quiet ? t.muted : t.foreground).child(name);
     return [
       // Sleek: the shown agent gets a filled highlight (like the open half of a toggle).
       // Personal (card polish): the shown agent is the "you are here" selection (accent wash);
       // the meta line is words in Geist, the age in Geist Mono; the program is the icon, so its
       // name isn't repeated in lowercase underneath.
-      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 26).flex_none().pl(workspace ? 14 : 34).pr(14).gap(workspace ? 12 : 10).items_center().rounded(ROW_R()).cursor_pointer()
+      h_flex().id(`ag-${a.address}`).h(42).flex_none().pl(workspace ? 14 : 33).pr(14).gap(workspace ? 12 : 10).items_center().rounded(ROW_R()).cursor_pointer()
         .when(Boolean(workspace), (el) => el.mb(2))
         .when(a.focused, (h) => h.bg(tint(t.accent, selA(t))))
         .when(!a.focused, (h) => h.hover((x) => x.bg(t.hover)))
         .on_click(() => run("pane.focus", a.pane ? { pane: a.pane } : { terminal: a.address }))
         .child(div().id(`ag-icon-${a.address}`).w(16).flex_none().flex().items_center().justify_center().tooltip(a.program?.name ?? prog)
           .when(Boolean(pic), (el) => el.child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(2).justify_center().when(Boolean(workspace), (c) => c.line_height(1.2))
-          .child(h_flex().w_full().min_w(0).gap(12).items_center()
+        .child(v_flex().flex_1().min_w(0).gap(2).justify_center().line_height(1.2)
+          // Title and age share the first line, so the second runs the row's full width.
+          .child(h_flex().w_full().min_w(0).gap(8).items_center()
             .child(div().flex_1().min_w(0).child(title))
-            .when(!workspace, (line) => line.child(this.rowEnd(t, a, ctx, when, machine, tabIndex, workspace))))
-          .when(Boolean(workspace), (c) => c.child(this.whereLine(t, a, ctx, workspace, machine, tabIndex))))
-        // Two-line rows: age or status centred on the row, mirroring the icon on the left.
-        .when(Boolean(workspace), (el) => el.child(this.rowEnd(t, a, ctx, when, machine, tabIndex, workspace))),
+            .child(this.rowEnd(t, a, ctx, when, workspace)))
+          .child(workspace ? this.whereLine(t, a, ctx, workspace, machine) : this.promptLine(t, a, ctx, machine, name))),
       // Sub-agents an agent started: one quiet line each, click to peek.
-      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(workspace ? 29 : 60).pr(14).gap(8).items_center().rounded(ROW_R())
+      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(workspace ? 29 : 59).pr(14).gap(8).items_center().rounded(ROW_R())
         .font_family(ctx.mono).text_size(11).text_color(t.muted).cursor_pointer()
         .hover((el) => el.bg(t.hover))
         .on_click(() => run("terminal.peek", { terminal: k.address }))
@@ -611,16 +629,16 @@ export default class Spaces extends View {
   }
 
   // How many agents are in each state, most urgent first, each with the same mark the
-  // rows use (a spinner, a red !, a filled dot, a ring) so the edge and the rows agree.
+  // rows use (a spinner, a red !, a filled dot; idle has no mark) so the edge and the rows agree.
   counts(t, mine) {
     const n = (st) => mine.filter((a) => a.status === st).length;
     const mark = (st) => st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(10).flex_none().text_color(t.working).spin(900)
       : st === "blocked" ? div().flex_none().font_bold().text_color(t.blocked).child("!")
       : st === "done" ? div().size(6).flex_none().rounded(3).bg(t.done)
-      : div().size(6).flex_none().rounded(3).border(1.2).border_color(t.idle ?? t.dim);
+      : null;
     return ["blocked", "working", "done", "idle"]
       .filter((st) => n(st) > 0)
-      .map((st) => h_flex().flex_none().gap(4).items_center().child(mark(st))
+      .map((st) => h_flex().flex_none().gap(4).items_center().when(st !== "idle", (el) => el.child(mark(st)))
         .child(div().text_color(st === "idle" ? t.dim : t.muted).child(String(n(st)))));
   }
 
@@ -684,14 +702,12 @@ export default class Spaces extends View {
       .when((g?.ahead ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(11).text_color(t.ansi2).child(`↑${g.ahead}`)))
       .when((g?.behind ?? 0) > 0, (el) => el.child(div().font_family(ctx.mono).text_size(11).text_color(t.ansi1).child(`↓${g.behind}`)))
       .child(div().flex_1())
-      // Folded: every status with its count. Open: only what's urgent (the rows show the rest).
-      .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))))
-      .when(open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11)
-        .children(this.counts(t, mine.filter((a) => a.status === "blocked" || a.status === "working")))));
+      // Folded: every status with its count. Open: nothing, the rows right below say it.
+      .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))));
 
     const body = mine.length
       ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
-      : h_flex().id(`empty-${w.id}`).h(24).pl(60).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
+      : h_flex().id(`empty-${w.id}`).h(24).pl(59).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
           .font_family(SANS).text_size(12).text_color(t.dim)
           .hover((el) => el.bg(t.hover).text_color(t.muted))
           .on_click(() => run("space.select", { id: w.id }))
@@ -913,7 +929,7 @@ export default class Spaces extends View {
     const visibleAgents = mode === "workspaces" ? sorted : orderAgents(list, mode);
     setAgentOrder(visibleAgents.map((a) => a.address));
     this.ctx = {
-      now, bySpace, mono: MONO(), all: terminals(), visibleAgents,
+      now, bySpace, mono: MONO(), all: terminals(), visibleAgents, prompts: latestPrompts(),
       spaceOf: new Map(sp.map(s => [s.id, s])),
       cwdOf: new Map(panes().map((p) => [p.pane, p.cwd ?? ""])),
       tabOf: new Map(sp.flatMap((s) => s.tabs).map((tab) => [tab.id, tab])),
@@ -936,7 +952,6 @@ export default class Spaces extends View {
             cx.notify();
           })
           .child(div().font_family(SANS).text_size(12).text_color(t.muted).font_semibold().child(mode === "workspaces" ? "Workspaces" : mode === "attention" ? "Attention" : "Agents"))
-          .child(div().h(16).px(6).flex().items_center().rounded(8).bg(tint(t.foreground, 0.06)).text_color(t.dim).child(`${mode === "workspaces" ? sp.length : list.length}`))
           .child(this.viewMenuButton(t, mode))
           .child(div().flex_1())
           .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`${needs} need you`)))

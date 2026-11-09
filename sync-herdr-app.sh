@@ -4,7 +4,7 @@
 # Why: Herdr and the personal Settings panel save files by replacing them, which turns a Stow
 # symlink into a regular file. After changing settings in the app, run this so the repo has them.
 #
-# Copies: keys.json, settings.json, rice.json, the added themes, the personal layouts, sounds,
+# Copies: keys.json, settings.json, rice.json, programs.json, the added themes, the personal layouts, sounds,
 # the wallpaper in use (plus the default one), every personal mod (my-*, sleek-*, tmux-prefix),
 # the OpenCode status plugin and the Claude Code status line. Skips Herdr's generated files
 # (gpui-kit.d.ts, jsconfig.json) and hidden files (backups, thumbnails, click state).
@@ -25,7 +25,7 @@ for mod in "$SRC"/mods/my-* "$SRC"/mods/sleek-* "$SRC"/mods/tmux-prefix; do
   rsync -a --delete "${EXCLUDE[@]}" "$mod/" "$DST/mods/$name/"
 done
 
-for f in PERSONAL.md keys.json settings.json rice.json layouts/na29-islands.json layouts/my-combined.json layouts/my-main.json; do
+for f in PERSONAL.md keys.json settings.json rice.json programs.json layouts/na29-islands.json layouts/my-combined.json layouts/my-main.json; do
   [[ -f "$SRC/$f" ]] || continue
   mkdir -p "$(dirname "$DST/$f")"
   copy "$SRC/$f" "$DST/$f"
