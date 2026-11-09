@@ -141,15 +141,6 @@ const numInk = (t, c, dim = false) => {
   return "#" + [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + parseInt(String(t.foreground).slice(i, i + 2), 16) * 0.45).toString(16).padStart(2, "0")).join("");
 };
 
-function workspaceNumber(t, w, i) {
-  const color = w.name === "~" ? t.ansi6 : (() => {
-    const stored = (shared("space.colors") ?? {})[w.id];
-    return !stored ? t.ansi6 : stored.startsWith("#") ? stored : (t[stored] ?? t.accent);
-  })();
-  return div().w(20).flex_none().font_family("Geist Mono").font_semibold().text_size(13)
-    .text_color(numInk(t, color, !w.active)).child(String(i + 1).padStart(2, "0"));
-}
-
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
@@ -241,10 +232,10 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try { this.agentKeys = new Set((await knownAgents()).map((a) => a.key)); cx.notify(); } catch {}
     });
-    if (props()?.viewMenu || props()?.spaceMenu || props()?.shellMenu) {
+    if (props()?.viewMenu || props()?.shellMenu) {
       this.menuHandle = cx.focus_handle();
       this.menuHandle.focus();
-      this.menuAt = Math.max(0, (props()?.items ?? []).findIndex((it) => it.active));
+      this.menuAt = 0;
       if (props()?.shellMenu) {
         this.jobs = [];
         this.jobsAt = 0;
@@ -1072,64 +1063,6 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Agents: switch the shown workspace. Attention has none: it spans every workspace. A dropdown,
-  // because it's one choice from a list of any length with names of any width: one uniform line
-  // showing the current workspace in full, and every workspace by name one click away.
-  strip(t) {
-    const list = this.ordered();
-    const cur = list.find((r) => r.w.active) ?? list[0];
-    if (!cur) return div();
-    const items = list.map(({ w, i }) => ({ id: w.id, name: w.name, num: i + 1, tone: spaceTone(t, w), status: w.status, active: w.active }));
-    return h_flex().id("ws-strip").flex_none().pb(6).mb(10).items_center()
-      .border_b_1().border_color(tint(t.foreground, 0.08))
-      .child(h_flex().id("ws-switch").flex_1().min_w(0).h(28).pl(14).pr(14).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
-        .hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => {
-          cx.stop_propagation();
-          openOverlay({ mod: "sleek-workspaces", kind: "popup", width: 260, height: Math.min(10 + items.length * 32, 344), frame: "none", props: { spaceMenu: true, items } });
-        })
-        .on_mouse_down("right", () => this.menu(cur.w))
-        .child(workspaceNumber(t, cur.w, cur.i))
-        .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(13).font_semibold().text_color(t.foreground).child(cur.w.name))
-        .child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.muted)));
-  }
-
-  // The workspace dropdown. Numbers pick directly; j/k and Enter move and choose; Esc closes.
-  renderSpaceMenu() {
-    const t = theme();
-    const items = props()?.items ?? [];
-    const close = () => closeOverlay(props().overlay);
-    const choose = (it) => { if (it) run("space.select", { id: it.id }); close(); };
-    return v_flex().id("space-popup").w_full().track_focus(this.menuHandle).font_family(SANS)
-      .on_key_down((e, cx) => {
-        const key = e.key_char ?? e.key;
-        const plain = !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform;
-        if (e.key === "escape") { cx.stop_propagation(); close(); return; }
-        if (!plain || !items.length) return;
-        if (/^[1-9]$/.test(key)) { const it = items.find((x) => x.num === Number(key)); if (it) { cx.stop_propagation(); choose(it); } return; }
-        if (key === "j" || e.key === "down") this.menuAt = (this.menuAt + 1) % items.length;
-        else if (key === "k" || e.key === "up") this.menuAt = (this.menuAt + items.length - 1) % items.length;
-        else if (e.key === "enter" || key === "l") { cx.stop_propagation(); choose(items[this.menuAt]); return; }
-        else return;
-        cx.stop_propagation(); cx.notify();
-      })
-      .child(v_flex().id("space-popup-list").w_full().max_h(344).rounded(12).border_1().border_color(t.border).overflow_y_scrollbar()
-        .bg(t.chrome).text_color(t.foreground).text_size(13).py(4).gap(2)
-        .children(items.map((it, i) => {
-          const flag = it.status === "blocked" ? div().flex_none().text_size(11).font_bold().text_color(t.blocked).child("!")
-            : it.status === "done" ? div().size(6).flex_none().rounded_full().bg(t.done) : null;
-          return h_flex().id(`space-pick-${it.id}`).h(30).flex_none().mx(5).px(9).gap(8).items_center().rounded(6).cursor_pointer()
-            .when(it.active, (el) => el.bg(tint(t.accent, selA(t))))
-            .when(!it.active && i === this.menuAt, (el) => el.bg(t.hover))
-            .when(!it.active, (el) => el.hover((s) => s.bg(t.hover)))
-            .on_click((_e, cx) => { cx.stop_propagation(); choose(it); })
-            .child(div().w(20).flex_none().font_family(MONO()).font_semibold().text_color(numInk(t, it.tone, !it.active)).child(String(it.num).padStart(2, "0")))
-            .child(div().flex_1().min_w(0).truncate().text_color(it.active ? t.foreground : t.muted).when(it.active, (d) => d.font_semibold()).child(it.name))
-            .when(Boolean(flag), (el) => el.child(flag))
-            .when(it.active, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.accent)));
-        })));
-  }
-
   individuals(t, mode) {
     const ctx = this.ctx;
     const rows = ctx.visibleAgents;
@@ -1171,7 +1104,6 @@ export default class Spaces extends View {
 
   render() {
     if (props()?.viewMenu) return this.renderViewMenu();
-    if (props()?.spaceMenu) return this.renderSpaceMenu();
     if (props()?.shellMenu) return this.renderShellMenu();
     const t = theme();
     const collapsed = narrow();
@@ -1228,7 +1160,7 @@ export default class Spaces extends View {
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
         // Personal: a hairline under the section header so it reads apart from the cards.
         .when(!collapsed && !this.listFolded, el => el.mx(0).pl(14).pr(8))
-        .when(!collapsed && !this.listFolded && mode !== "agents", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
+        .when(!collapsed && !this.listFolded, el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
             this.listFolded = !this.listFolded;
@@ -1247,7 +1179,6 @@ export default class Spaces extends View {
             .on_click(() => expandRail())
             .child(svg("mods/workspace-chrome/sidebar.svg").size(16))))
         .child(plus))
-      .when(!collapsed && !this.listFolded && mode === "agents", el => el.child(this.strip(t)))
       .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));

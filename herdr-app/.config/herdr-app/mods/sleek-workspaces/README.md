@@ -12,7 +12,6 @@ Clicks focus the agent's pane; child-agent rows still open their peek. Native ne
 
 Validation: native checks for sleek-workspaces, my-settings, my-keys and a synthetic populated Attention view; live flat-view screenshot; ordering/interaction tests covering stable status changes, pins, unknown/empty states, settings preservation and navigation. Run the latter with `node --experimental-default-type=module tests/agent-views.test.mjs`.
 
-In **Agents**, a dropdown under the header switches the shown workspace; right-click opens its space menu. **Attention** has none, because it spans every workspace.
 
 ## Waiting for shells
 
