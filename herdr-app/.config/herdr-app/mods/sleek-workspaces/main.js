@@ -543,7 +543,7 @@ export default class Spaces extends View {
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
     const last = loud ? h_flex().w(16).flex_none().justify_center().child(this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;
-    return h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).text_color(t.muted)
+    return h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).text_color(!workspace && !a.focused ? t.dim : t.muted)
       .when(!workspace && tabs.size > 1 && tabIndex != null, (el) => el.child(h_flex().flex_none().gap(4).items_center().child(div().font_family(SANS).child("Tab")).child(div().child(String(tabIndex)))))
       .when(!workspace && Boolean(machine), (el) => el.child(div().flex_none().child(`@${machine}`)))
       .when(Boolean(last), (el) => el.child(!workspace && tabs.size > 1 ? h_flex().w(26).flex_none().justify_end().child(last) : last));
@@ -585,7 +585,7 @@ export default class Spaces extends View {
       // Personal (card polish): the shown agent is the "you are here" selection (accent wash);
       // the meta line is words in Geist, the age in Geist Mono; the program is the icon, so its
       // name isn't repeated in lowercase underneath.
-      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 28).flex_none().px(14).gap(12).items_center().rounded(ROW_R()).cursor_pointer()
+      h_flex().id(`ag-${a.address}`).h(workspace ? 42 : 26).flex_none().pl(workspace ? 14 : 34).pr(14).gap(workspace ? 12 : 10).items_center().rounded(ROW_R()).cursor_pointer()
         .when(Boolean(workspace), (el) => el.mb(2))
         .when(a.focused, (h) => h.bg(tint(t.accent, selA(t))))
         .when(!a.focused, (h) => h.hover((x) => x.bg(t.hover)))
@@ -600,7 +600,7 @@ export default class Spaces extends View {
         // Two-line rows: age or status centred on the row, mirroring the icon on the left.
         .when(Boolean(workspace), (el) => el.child(this.rowEnd(t, a, ctx, when, machine, tabIndex, workspace))),
       // Sub-agents an agent started: one quiet line each, click to peek.
-      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(29).pr(14).gap(8).items_center().rounded(ROW_R())
+      ...kids.map((k) => h_flex().id(`sub-${k.address}`).h(24).flex_none().pl(workspace ? 29 : 60).pr(14).gap(8).items_center().rounded(ROW_R())
         .font_family(ctx.mono).text_size(11).text_color(t.muted).cursor_pointer()
         .hover((el) => el.bg(t.hover))
         .on_click(() => run("terminal.peek", { terminal: k.address }))
@@ -637,9 +637,19 @@ export default class Spaces extends View {
     const branch = rawBranch && rawBranch !== "main" && rawBranch !== "master" && rawBranch.toLowerCase() !== w.name.toLowerCase() ? rawBranch : null;
 
     // Hovering the title brightens it (no nested highlight inside the card).
-    const head = h_flex().id(`space-${w.id}`).h(26).pl(14).pr(12).gap(8).items_center().rounded(ROW_R()).cursor_pointer()
-      .text_color(on ? t.foreground : t.muted)
-      .hover((h) => h.text_color(t.foreground))
+    // A tree, like an editor's explorer: the disclosure arrow leads, then the number and name.
+    const fold = div().id(`fold-${w.id}`).flex_none().p(2).rounded(4).cursor_pointer()
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          open ? this.boxesFolded.add(w.id) : this.boxesFolded.delete(w.id);
+          localStorage.setItem("boxes.folded", JSON.stringify([...this.boxesFolded]));
+          cx.notify();
+        })
+        .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12));
+    const head = h_flex().id(`space-${w.id}`).h(26).pl(12).pr(14).gap(6).items_center().rounded(ROW_R()).cursor_pointer()
+      .text_color(t.dim)
+      .hover((h) => h.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", () => {
         this.pressed = w.id;
         this.over = w.id;
@@ -665,7 +675,8 @@ export default class Spaces extends View {
       })
       .on_mouse_down("right", () => this.menu(w))
       .when(Boolean(tree), (el) => el.child(div().text_color(t.dim).child("↳")))
-      .child(workspaceNumber(t, w, i))
+      .child(fold)
+      .child(div().w(20).flex_none().font_family(MONO()).text_size(11).font_semibold().text_color(w.active ? t.foreground : t.dim).child(String(i + 1).padStart(2, "0")))
       // Workspace names are headings: semibold everywhere (agent titles stay regular); the shown one is bright.
       .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13)
         .font_semibold().text_color(t.foreground).child(w.name))
@@ -676,20 +687,11 @@ export default class Spaces extends View {
       // Folded: every status with its count. Open: only what's urgent (the rows show the rest).
       .when(!open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11).children(this.counts(t, mine))))
       .when(open, (el) => el.child(h_flex().flex_none().gap(8).items_center().font_family(ctx.mono).text_size(11)
-        .children(this.counts(t, mine.filter((a) => a.status === "blocked" || a.status === "working")))))
-      .child(div().id(`fold-${w.id}`).flex_none().p(2).rounded(4).cursor_pointer()
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click((_e, cx) => {
-          cx.stop_propagation();
-          open ? this.boxesFolded.add(w.id) : this.boxesFolded.delete(w.id);
-          localStorage.setItem("boxes.folded", JSON.stringify([...this.boxesFolded]));
-          cx.notify();
-        })
-        .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12)));
+        .children(this.counts(t, mine.filter((a) => a.status === "blocked" || a.status === "working")))));
 
     const body = mine.length
       ? v_flex().pt(2).gap(2).children(mine.flatMap((a) => this.agentRow(t, a, ctx)))
-      : h_flex().id(`empty-${w.id}`).h(26).px(14).items_center().rounded(ROW_R()).cursor_pointer()
+      : h_flex().id(`empty-${w.id}`).h(24).pl(60).pr(14).items_center().rounded(ROW_R()).cursor_pointer()
           .font_family(SANS).text_size(12).text_color(t.dim)
           .hover((el) => el.bg(t.hover).text_color(t.muted))
           .on_click(() => run("space.select", { id: w.id }))
@@ -703,7 +705,7 @@ export default class Spaces extends View {
     // Personal (card polish): no glowing accent outline. Every card is the same quiet surface with
     // a neutral hairline; the shown one is a touch lighter and announced by its full-strength
     // number and bright name. Accent is kept for the focused agent row inside.
-    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : tree ? 14 : 18)
+    return v_flex().relative().w_full().flex_none().mt(i === 0 && !tree ? 2 : tree ? 4 : 10)
       .when(Boolean(tree), (el) => el.ml(14))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
