@@ -676,7 +676,7 @@ export default class Spaces extends View {
     if (a.status === "waiting") return h_flex().flex_none().gap(4).items_center()
       .font_family(SANS).text_size(11).text_color(t.muted)
       .tooltip(`Waiting for ${a.shells} background ${a.shells === 1 ? "shell" : "shells"}; background work is still running`)
-      .child(this.agentStatus(t, "waiting")).child(`${a.shells} ${a.shells === 1 ? "shell" : "shells"}`);
+      .child(this.agentStatus(t, "waiting"));
     const loud = !workspace?.quiet && (a.status === "working" || a.status === "blocked" || a.status === "done");
     const last = loud ? (a.status === "done" ? div().size(7).flex_none().rounded(4).bg(t.done) : this.agentStatus(t, a.status))
       : when ? div().flex_none().child(duration(ctx.now - when)) : null;

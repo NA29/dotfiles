@@ -30,7 +30,7 @@ always keep priority. Unknown agents use the shared ownership rule without a TUI
 parser. Detached jobs assigned to an agent by the child-row association also contribute
 to its waiting count. Jobs assigned only to a workspace do not change an agent's status.
 
-Waiting rows show a muted native pulse and shell count, with their own Attention
+Waiting rows show only a muted native pulse (shell count on hover), with their own Attention
 group. Reads/scans run every five seconds; stale data expires after fifteen seconds,
 read failures clear the associated data, and screen readings are invalidated by a
 status sequence change. This is a sidebar display state, not a new core status;
