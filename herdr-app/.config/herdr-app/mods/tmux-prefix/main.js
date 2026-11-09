@@ -74,12 +74,13 @@ function translucent(color, alpha) {
   return color + Math.round(alpha * 255).toString(16).padStart(2, "0");
 }
 
-// Shift+number jumps to that workspace. It types a symbol that depends on the layout, so these
-// cover Canadian (and US) and Canadian CSA. Symbols already bound to something ("%", '"', "?")
-// aren't listed, and keep their meaning.
-const SHIFTED_NUMBERS = { "!": 1, "@": 2, "#": 3, "/": 3, "$": 4, "^": 6, "&": 7, "*": 8, "(": 9 };
-function shiftedNumber(key) {
-  return SHIFTED_NUMBERS[key] ?? (/^[1-9]$/.test(key) ? Number(key) : null);
+// Shift+number jumps to that workspace. The event carries the typed symbol with shift already
+// consumed (Shift+1 arrives as "!", shift false), so the symbol alone identifies it. Symbols with
+// another meaning here ("%", '"', "?") aren't listed, and "/" isn't because it's a plain key on
+// the Canadian layout.
+const SHIFTED_NUMBERS = { "!": 1, "@": 2, "#": 3, "$": 4, "^": 6, "&": 7, "*": 8, "(": 9 };
+function shiftedNumber(key, shift) {
+  return SHIFTED_NUMBERS[key] ?? (shift && /^[1-9]$/.test(key) ? Number(key) : null);
 }
 
 function forwardKey(e, key) {
@@ -143,10 +144,11 @@ export default class TmuxPrefix extends View {
       cx.notify();
       return;
     }
-    const space = plain && m.shift ? shiftedNumber(key) : null;
+    const space = plain ? shiftedNumber(key, m.shift) : null;
     if (space) {
+      const target = spaces()[space - 1];
       this.dismiss();
-      if (space <= spaces().length) run("space.select", { index: space });
+      if (target) run("space.select", { id: target.id });
       return;
     }
     const binding = plain && BINDINGS.find((b) => b[0] === key);
