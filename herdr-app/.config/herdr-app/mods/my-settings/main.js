@@ -160,7 +160,7 @@ export default class MySettings extends View {
     mk("fontSize", 10, 24, 0.5, c["terminal.fontSize"] ?? 14, (v) => set({ "terminal.fontSize": v }));
     mk("contrast", 1, 7, 0.1, s.minimum_contrast ?? 1, (v, cx) => this.saveSettings(cx, (o) => { o.minimum_contrast = Math.round(v * 10) / 10; }));
     mk("zoom", 0.75, 2, 0.05, s.zoom ?? 1, (v, cx) => this.saveSettings(cx, (o) => { o.zoom = Math.round(v * 100) / 100; }));
-    mk("sidebarW", 200, 420, 2, px("sidebar", 268), (v) => { setShared("sidebar.width", v); run("layout.resize", { id: "sidebar", px: v }); }, 4);
+    mk("sidebarW", 232, 480, 2, px("sidebar", 268), (v) => { setShared("sidebar.width", v); run("layout.resize", { id: "sidebar", px: v }); }, 4);
     mk("tabsH", 32, 52, 1, px("tabs", 40), (v) => run("layout.resize", { id: "tabs", px: v }));
     mk("statusH", 26, 44, 1, px("status", 32), (v) => run("layout.resize", { id: "status", px: v }));
     mk("rows", 2, 12, 1, c["activity.rows"], (v) => set({ "activity.rows": v }));

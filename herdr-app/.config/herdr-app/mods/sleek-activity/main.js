@@ -11,7 +11,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { agents, terminals, spaces, panes, run, theme, layout, props, shared, setShared, openOverlay, closeOverlay, home, readTextFile, exec } from "herdr";
+import { settings, agents, terminals, spaces, panes, run, theme, layout, props, shared, setShared, openOverlay, closeOverlay, home, readTextFile, exec } from "herdr";
 import { box, fit, tint, glass } from "./box.js";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
@@ -274,7 +274,7 @@ export default class Activity extends View {
   rail(t) {
     fit(layout, run, "activity", 1);
     return div().id("root").size_full()
-      .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } });
+      .on_size_change((size, cx) => { const small = size.width / settings().zoom < 140; if (small !== this.narrow) { this.narrow = small; cx.notify(); } });
   }
 
   sidebar(t) {
@@ -307,7 +307,7 @@ export default class Activity extends View {
           .child(div().w(28).flex_none().text_right().text_color(t.dim).child(took(r.took) || "")))
       : [div().h(ROW).px(14).flex().items_center().font_family(SANS).text_color(t.dim).child("No runs yet")];
     return v_flex().id("root").size_full().min_h(0).font_family(MONO).text_size(11)
-      .on_size_change((size, cx) => { if ((size.width < 140) !== this.narrow) { this.narrow = size.width < 140; cx.notify(); } })
+      .on_size_change((size, cx) => { const small = size.width / settings().zoom < 140; if (small !== this.narrow) { this.narrow = small; cx.notify(); } })
       .child(box(t, {
         id: "activity", title: "activity", open: this.open, onToggle: toggle,
         extra: [],

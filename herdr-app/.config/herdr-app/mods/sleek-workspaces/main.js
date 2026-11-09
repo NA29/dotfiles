@@ -48,8 +48,21 @@ function find(node, id) {
   return null;
 }
 
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
+// The sidebar is either full or the rail, nothing between; the layout's limits keep it that way.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
+
+// Back to full: same step as sleek-chrome's setRail (mods can't import across folders).
+function expandRail() {
+  const root = JSON.parse(JSON.stringify(layout()));
+  const side = find(root, "sidebar"), row = find(root, "dim");
+  if (!side || !row) return;
+  setShared("sidebar.collapsed", false);
+  side.size = { px: Math.max(232, shared("sidebar.width") ?? 268) };
+  side.min = 232;
+  side.max = 480;
+  row.resizable = true;
+  run("layout.set", { layout: root });
+}
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
@@ -643,8 +656,8 @@ export default class Spaces extends View {
   }
 
   // Sleek experiment: each workspace is a soft card (pane background, no border). Its header row
-  // is the handle: click to show the workspace, drag onto another to reorder, right-click for
-  // its menu, the chevron folds it. The shown workspace's card is a little brighter.
+  // is the handle: click to fold or open it (same as the chevron), drag onto another to reorder,
+  // right-click for its menu. The shown workspace's card is a little brighter.
   row({ w, i, g, tree }, t) {
     const ctx = this.ctx;
     const on = w.active;
@@ -654,20 +667,34 @@ export default class Spaces extends View {
     const rawBranch = g ? (g.branch ?? "detached") : null;
     const branch = rawBranch && rawBranch !== "main" && rawBranch !== "master" && rawBranch.toLowerCase() !== w.name.toLowerCase() ? rawBranch : null;
 
-    // Hovering the title brightens it (no nested highlight inside the card).
+    const toggle = () => {
+      open ? this.boxesFolded.add(w.id) : this.boxesFolded.delete(w.id);
+      localStorage.setItem("boxes.folded", JSON.stringify([...this.boxesFolded]));
+    };
+    // Hovering the title lights the chevron and number, not the row: a filled heading would merge
+    // with the highlighted agent row right below it, and the name is already full brightness.
+    const hot = this.hotHead === w.id;
     // A tree, like an editor's explorer: the disclosure arrow leads, then the number and name.
     const fold = div().id(`fold-${w.id}`).flex_none().p(2).rounded(4).cursor_pointer()
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .when(hot, (el) => el.bg(t.hover).text_color(t.foreground))
+        .on_mouse_down("left", (_e, cx) => {
+          // A press that ended outside the list would otherwise fold twice on this click.
+          this.pressed = null;
+          this.over = null;
+          cx.stop_propagation();
+        })
         .on_click((_e, cx) => {
           cx.stop_propagation();
-          open ? this.boxesFolded.add(w.id) : this.boxesFolded.delete(w.id);
-          localStorage.setItem("boxes.folded", JSON.stringify([...this.boxesFolded]));
+          toggle();
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12));
     const head = h_flex().id(`space-${w.id}`).h(26).pl(12).pr(14).gap(6).items_center().rounded(ROW_R()).cursor_pointer()
       .text_color(t.dim)
-      .hover((h) => h.bg(t.hover).text_color(t.foreground))
+      .on_hover((on, cx) => {
+        this.hotHead = on ? w.id : this.hotHead === w.id ? null : this.hotHead;
+        cx.notify();
+      })
       .on_mouse_down("left", () => {
         this.pressed = w.id;
         this.over = w.id;
@@ -688,13 +715,13 @@ export default class Spaces extends View {
         if (from !== null && over === w.id && from !== w.id) {
           const index = spaces().findIndex(s => s.id === w.id);
           if (index !== -1) run("space.move", { id: from, index: index + 1 });
-        } else if (from === w.id) run("space.select", { id: w.id });
+        } else if (from === w.id) toggle();
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
       .when(Boolean(tree), (el) => el.child(div().text_color(t.dim).child("↳")))
       .child(fold)
-      .child(div().w(20).flex_none().font_family(MONO()).text_size(11).font_semibold().text_color(w.active ? t.foreground : t.dim).child(String(i + 1).padStart(2, "0")))
+      .child(div().w(20).flex_none().font_family(MONO()).text_size(11).font_semibold().text_color(w.active || hot ? t.foreground : t.dim).child(String(i + 1).padStart(2, "0")))
       // Workspace names are headings: semibold everywhere (agent titles stay regular); the shown one is bright.
       .child(div().flex_shrink_1().min_w(0).truncate().font_family(SANS).text_size(13)
         .font_semibold().text_color(t.foreground).child(w.name))
@@ -960,14 +987,11 @@ export default class Spaces extends View {
         .when(collapsed, el => el.flex_col().h(64).py(4).pl(0).pr(0).gap(2).justify_center()
           .child(div().id("rail-expand").size(26).flex_none().flex().items_center().justify_center().rounded(6)
             .text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip("Expand sidebar")
-            .on_click(() => {
-              setShared("sidebar.collapsed", false);
-              run("layout.resize", { id: "sidebar", px: shared("sidebar.width") ?? 268 });
-            })
+            .on_click(() => expandRail())
             .child(svg("mods/workspace-chrome/sidebar.svg").size(16))))
         .child(plus))
       .when(!collapsed && !this.listFolded && mode !== "workspaces", el => el.child(this.strip(t)))
-      .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).px(collapsed ? 8 : 0).pb(14).overflow_y_scrollbar().mode("always")
+      .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));
   }

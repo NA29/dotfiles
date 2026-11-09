@@ -39,17 +39,29 @@ function find(node, id) {
   return null;
 }
 
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
+// The sidebar is either full or the rail, nothing between; the layout's limits keep it that way.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 
-// To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
-function toggleSidebar() {
-  const width = find(layout(), "sidebar")?.size?.px;
-  if (!narrow()) setShared("sidebar.width", width);
-  // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
+// Full: dragged between SIDEBAR_MIN (everything still fits) and SIDEBAR_MAX. Rail: fixed.
+const SIDEBAR_MIN = 232, SIDEBAR_MAX = 480;
+
+// One layout.set moves the size and the limits together, so no frame draws the rail inside a
+// full-width sidebar. The rail is as wide as its tiles; sleek-tabs clears the traffic lights itself.
+function setRail(on) {
+  const root = JSON.parse(JSON.stringify(layout()));
+  const side = find(root, "sidebar"), row = find(root, "dim");
+  if (!side || !row) return;
+  const rail = 52;
+  if (on) setShared("sidebar.width", side.size?.px);
+  setShared("sidebar.collapsed", on);   // mods edited before the rail went by width still read it
+  side.size = { px: on ? rail : Math.max(SIDEBAR_MIN, shared("sidebar.width") ?? 268) };
+  side.min = on ? rail : SIDEBAR_MIN;
+  side.max = on ? rail : SIDEBAR_MAX;
+  row.resizable = !on;   // the rail's edge isn't a drag handle
+  run("layout.set", { layout: root });
 }
+
+const toggleSidebar = () => setRail(!narrow());
 
 // Personal: concentric corners. Inner radius = outer radius - the padding between them.
 const concentric = (outer, inset) => Math.max(0, outer - inset);
