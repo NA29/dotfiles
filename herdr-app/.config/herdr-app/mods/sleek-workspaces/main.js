@@ -1072,7 +1072,7 @@ export default class Spaces extends View {
           .child(div().font_family(MONO()).child(`${current.toLowerCase()} · ${agents().length} agents`))));
   }
 
-  // Agents and Attention: pick the workspace (the + makes new agents in the shown one). A dropdown,
+  // Agents: switch the shown workspace. Attention has none: it spans every workspace. A dropdown,
   // because it's one choice from a list of any length with names of any width: one uniform line
   // showing the current workspace in full, and every workspace by name one click away.
   strip(t) {
@@ -1142,7 +1142,7 @@ export default class Spaces extends View {
         // A heading sits tight on its rows, with about twice that distance between groups, so each
         // group reads as one block. It's styled as a label, like the panel title, so agents lead.
         children.push(h_flex().id(`attention-${group.status}`).h(20).mt(children.length ? 24 : 0).px(14).gap(12).items_center().flex_none()
-          .child(h_flex().w(16).flex_none().justify_center().when(group.status !== "idle", el => el.child(this.agentStatus(t, group.status))))
+          .child(h_flex().w(16).flex_none().justify_center().when(!["idle", "waiting"].includes(group.status), el => el.child(this.agentStatus(t, group.status))))
           .child(div().flex_1().min_w(0).truncate().font_family(SANS).text_size(12).font_semibold().text_color(t.muted).child(group.title))
           .child(div().flex_none().font_family(MONO()).text_size(11).text_color(t.dim).child(String(group.agents.length))));
         children.push(...group.agents.flatMap(draw));
@@ -1228,7 +1228,7 @@ export default class Spaces extends View {
       .child(h_flex().id("ws-head").h(34).pl(14).pr(8).gap(8).items_center().flex_none().font_family(MONO()).text_size(11)
         // Personal: a hairline under the section header so it reads apart from the cards.
         .when(!collapsed && !this.listFolded, el => el.mx(0).pl(14).pr(8))
-        .when(!collapsed && !this.listFolded && mode === "workspaces", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
+        .when(!collapsed && !this.listFolded && mode !== "agents", el => el.border_b_1().border_color(tint(t.foreground, 0.08)).mb(8))
         .when(!collapsed, el => el.cursor_pointer()
           .on_click((_e, cx) => {
             this.listFolded = !this.listFolded;
@@ -1247,7 +1247,7 @@ export default class Spaces extends View {
             .on_click(() => expandRail())
             .child(svg("mods/workspace-chrome/sidebar.svg").size(16))))
         .child(plus))
-      .when(!collapsed && !this.listFolded && mode !== "workspaces", el => el.child(this.strip(t)))
+      .when(!collapsed && !this.listFolded && mode === "agents", el => el.child(this.strip(t)))
       .child(v_flex().id(`agent-list-${mode}`).flex_1().min_h(0).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.listFolded && !collapsed ? [] : (collapsed || mode === "workspaces") ? this.grouped(t, collapsed) : this.individuals(t, mode)));
