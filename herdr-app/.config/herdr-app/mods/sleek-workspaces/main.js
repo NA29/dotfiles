@@ -7,7 +7,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, agents, terminals, settings, setAgentOrder, props, closeOverlay, home as homeDir, knownAgents } from "herdr";
 import { div as sqDiv } from "gpui-kit";
 import { shared as sqShared } from "herdr";
 import { VIEW_MODES, viewMode, orderAgents, attentionGroups } from "./agent-views.js";
@@ -218,6 +218,11 @@ const lift = (t, k) => {
 const selA = (t) => (parseInt(String(t.chrome).slice(1, 3), 16) > 128 ? 0.12 : 0.20);
 export default class Spaces extends View {
   init(_props, cx) {
+    // Which programs are agents, for panes that report no status (see render).
+    this.agentKeys = new Set();
+    cx.spawn(async (cx) => {
+      try { this.agentKeys = new Set((await knownAgents()).map((a) => a.key)); cx.notify(); } catch {}
+    });
     if (props()?.viewMenu || props()?.spaceMenu) {
       this.menuHandle = cx.focus_handle();
       this.menuHandle.focus();
@@ -943,7 +948,16 @@ export default class Spaces extends View {
 
     // Agents per workspace, most urgent first, then most recently changed.
     const now = Date.now();
-    const list = agents();
+    // agents() only has terminals that report a status. A pane running an agent that reports none
+    // (Claude Code sends no status from a session moved to the background) still belongs in the
+    // list; with nothing to go on, it reads as idle.
+    const reporting = agents();
+    const known = new Set(reporting.map((a) => a.address));
+    const spaceOfTab = new Map(sp.flatMap((s) => (s.tabs ?? []).map((tab) => [tab.id, s])));
+    const silent = panes()
+      .filter((p) => p.terminal && p.status == null && this.agentKeys.has(p.program?.key) && !known.has(p.terminal) && spaceOfTab.has(p.tab))
+      .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, space: spaceOfTab.get(p.tab).id, status: "idle", app: p.app, program: p.program, title: p.title, focused: p.focused, pinned: false }));
+    const list = [...reporting, ...silent];
     this.track(list, now);
     const order = new Map(sp.map((s, n) => [s.id, n]));
     const since = (a) => this.changed[a.address]?.at ?? 0;
