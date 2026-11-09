@@ -7,7 +7,8 @@
 # Copies: keys.json, settings.json, rice.json, programs.json, the added themes, the personal layouts, sounds,
 # the wallpaper in use (plus the default one), every personal mod (my-*, sleek-*, tmux-prefix),
 # the OpenCode status plugin and the Claude Code status line. Skips Herdr's generated files
-# (gpui-kit.d.ts, jsconfig.json) and hidden files (backups, thumbnails, click state).
+# (gpui-kit.d.ts, jsconfig.json) and hidden files (backups, thumbnails); click state is folded
+# into the repo's copy of the shown layout.
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
@@ -30,6 +31,45 @@ for f in PERSONAL.md keys.json settings.json rice.json programs.json layouts/na2
   mkdir -p "$(dirname "$DST/$f")"
   copy "$SRC/$f" "$DST/$f"
 done
+
+# Sizes, hidden sections and theme picks made by clicking live in Herdr's hidden click-state file.
+# Fold them into the repo's copy of the shown layout, so the repo matches what's on screen. A click
+# only counts if the layout file hasn't changed that field since (a file edit beats a click).
+if [[ ! "$SRC/layouts/na29-islands.json" -ef "$DST/layouts/na29-islands.json" ]]; then
+  python3 -I - "$SRC/layouts/.state/na29-islands.json" "$DST/layouts/na29-islands.json" <<'PY'
+import json, os, sys
+
+state_path, layout_path = sys.argv[1:3]
+if not os.path.exists(state_path):
+    sys.exit(0)
+
+def find(node, wanted):
+    if node.get("id") == wanted:
+        return node
+    for child in node.get("children", []):
+        found = find(child, wanted)
+        if found:
+            return found
+    return None
+
+state = json.load(open(state_path))
+layout = json.load(open(layout_path))
+snapshot = state.get("file")
+for node_id, fields in state.get("nodes", {}).items():
+    node = find(layout, node_id)
+    was = find(snapshot, node_id) if snapshot else None
+    if not node:
+        continue
+    for field, value in fields.items():
+        if snapshot is None or (was or {}).get(field) == node.get(field):
+            node[field] = value
+if state.get("theme") and (snapshot is None or snapshot.get("theme") == layout.get("theme")):
+    layout["theme"] = state["theme"]
+with open(layout_path, "w") as out:
+    json.dump(layout, out, indent=2)
+    out.write("\n")
+PY
+fi
 
 # Every added theme (Herdr writes its own atom-one-dark and win98 itself).
 mkdir -p "$DST/themes"
