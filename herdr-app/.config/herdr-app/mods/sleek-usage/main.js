@@ -70,6 +70,7 @@ export default class Usage extends View {
     this.raw = shared("usage.latest") ?? {};
     this.errors = {};
     this.refreshing = false;
+    this.refreshState = null;
     this.tab = props()?.tab ?? localStorage.getItem("usage.tab") ?? "cost";
     this.providerFilter = props()?.provider ?? "all";
     this.providerMenu = false;
@@ -89,18 +90,22 @@ export default class Usage extends View {
   refresh(cx) {
     if (this.refreshing) return;
     this.refreshing = true;
+    this.refreshState = null;
     cx.notify();
     cx.spawn(async (cx) => {
+      let ok = true;
       try {
         const r = await exec("python3", ["-I", `${appHome()}/mods/sleek-usage/usage.py`, "--limits"]);
         if (r.code !== 0) throw new Error("Could not read account limits");
         this.raw = JSON.parse(r.stdout);
         this.errors = {};
         if (!this.detail) setShared("usage.latest", this.raw);
-      } catch { this.errors.limits = "Could not refresh account limits; showing the last reading."; }
+      } catch { ok = false; this.errors.limits = "Could not refresh account limits; showing the last reading."; }
       this.refreshing = false;
+      this.refreshState = ok ? "ok" : "error";
       this.fit();
       cx.notify();
+      if (ok) cx.timer.after(1800, (cx) => { if (this.refreshState === "ok") { this.refreshState = null; cx.notify(); } });
     });
   }
 
