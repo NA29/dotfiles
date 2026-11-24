@@ -106,6 +106,14 @@ if command -v herdr-app >/dev/null 2>&1 && herdr-app status >/dev/null 2>&1; the
   herdr-app do layout.switch --name na29-islands >/dev/null 2>&1 && echo "Herdr: switched to the na29-islands layout"
 fi
 
+# 8. Never idle-sleep on the charger, so remote tools (T3 Connect's tunnel, SSH) stay reachable.
+#    A sleeping Mac drops its tunnel and nothing remote can wake it. Only the AC profile (-c) changes:
+#    the display still sleeps, and on battery the Mac sleeps as before. Lid closed still sleeps.
+if [[ "$(pmset -g custom | awk '/^AC Power/{ac=1} ac && $1=="sleep"{print $2; exit}')" != "0" ]]; then
+  echo "Turning off idle sleep on the charger (needs your password)"
+  sudo pmset -c sleep 0
+fi
+
 cat <<'EOF'
 
 Manual steps:
