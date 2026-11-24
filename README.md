@@ -31,6 +31,11 @@ Stow except `herdr-app/`, which is copied.
 `install.sh` also sets Codex's terminal title to the conversation name (`[tui] terminal_title` in
 `~/.codex/config.toml`) so Herdr's sidebar can show it; the rest of that file belongs to Codex.
 
+It also turns off idle sleep on the charger (`sudo pmset -c sleep 0`, asks for your password once), so
+T3 Connect's tunnel and SSH stay reachable from your phone. On battery the Mac sleeps as before, and
+closing the lid still sleeps it unless an external display is connected. A Mac that is already asleep
+needs one real wake (a key press, or `caffeinate -u -t 10`) before it is reachable.
+
 ### Herdr desktop app
 
 Herdr writes runtime state next to its config (window position, activity history, generated
